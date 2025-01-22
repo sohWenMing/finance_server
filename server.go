@@ -1,6 +1,8 @@
 package server
 
 import (
+	"errors"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -13,13 +15,16 @@ func InitServer(isTest bool, portChan chan<- int, doneChan <-chan struct{}) {
 	if isTest {
 		port = ":0"
 	}
+	//for testing purposes, usually will listen at port :8080, but if testing sets port to 0 so that random available port will be used
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /ping", handlers.PingHandler)
+	mux.Handle("GET /app/", http.StripPrefix("/app", handlers.MiddleWareGenerator(http.FileServer(http.Dir(".")))))
 	server := &http.Server{
 		Handler: mux,
 	}
 	listener, err := net.Listen("tcp", port)
+	//becauase net.Listen is already given an input param of "tcp", the return of listener.Addr() will will return a type of *net.TCPAddr
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -31,6 +36,10 @@ func InitServer(isTest bool, portChan chan<- int, doneChan <-chan struct{}) {
 	go func() {
 		serveErr := server.Serve(listener)
 		if serveErr != nil {
+			if errors.Is(serveErr, http.ErrServerClosed) {
+				fmt.Println("expected server close")
+			}
+			fmt.Print("serveErr was executed!\n")
 			log.Fatal(serveErr)
 		}
 	}()

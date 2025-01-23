@@ -1,0 +1,46 @@
+package config
+
+import (
+	"database/sql"
+	"net/http"
+
+	"github.com/sohWenMing/finance_server/internal/database/sqlc_generated"
+)
+
+/*
+	the config holds is the main holder of all information of the application
+
+	this includes:
+	* Qeuries which are sql generated
+	* Handlers, which are passed into to server in the main function
+*/
+
+type Config struct {
+	Qeuries *sqlc_generated.Queries
+}
+
+func (c *Config) RegisterQueries(db *sql.DB) {
+	// at this point, the database should already be loaded, so we should be passing the db type into this function
+	c.Qeuries = sqlc_generated.New(db)
+}
+func (c *Config) PingHandler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(200)
+	w.Header().Set("content-type", "text/plain")
+	w.Write([]byte("OK"))
+}
+
+func (c *Config) FileServerMiddleWare(fileServerHandler http.Handler) http.Handler {
+	return fsMiddleWareGenerator(fileServerHandler)
+}
+
+func fsMiddleWareGenerator(next http.Handler) http.Handler {
+	/*
+		http.HandlerFunc takes in a function with a signature of func(http.ResponseWriter http.Request) which
+		has a ServeHTTP method, satisfying the http.Handler type. Allows for passing of other handlers into the
+		function, which allows the function to act as a middleware layer
+	*/
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		next.ServeHTTP(w, r)
+	})
+}

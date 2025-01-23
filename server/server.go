@@ -7,10 +7,10 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/sohWenMing/finance_server/handlers"
+	"github.com/sohWenMing/finance_server/config"
 )
 
-func InitServer(isTest bool, portChan chan<- int, doneChan <-chan struct{}, exitChan chan<- struct{}, root http.FileSystem) {
+func InitServer(isTest bool, portChan chan<- int, doneChan <-chan struct{}, exitChan chan<- struct{}, root http.FileSystem, config config.Config) {
 	port := ":8080"
 	if isTest {
 		port = ":0"
@@ -18,8 +18,8 @@ func InitServer(isTest bool, portChan chan<- int, doneChan <-chan struct{}, exit
 	//for testing purposes, usually will listen at port :8080, but if testing sets port to 0 so that random available port will be used
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /ping", handlers.PingHandler)
-	mux.Handle("GET /app/", http.StripPrefix("/app", handlers.MiddleWareGenerator(http.FileServer(root))))
+	mux.HandleFunc("GET /ping", config.PingHandler)
+	mux.Handle("GET /app/", http.StripPrefix("/app", config.FileServerMiddleWare(http.FileServer(root))))
 	server := &http.Server{
 		Handler: mux,
 	}

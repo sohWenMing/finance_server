@@ -3,12 +3,15 @@ package server
 import (
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/sohWenMing/finance_server/config"
+	database "github.com/sohWenMing/finance_server/internal/database/connection"
 	testhelpers "github.com/sohWenMing/finance_server/test_helpers"
 )
 
@@ -23,6 +26,10 @@ var (
 
 func TestMain(m *testing.M) {
 
+	db, err := database.ConnectToDB("../.env")
+	if err != nil {
+		log.Fatal(err)
+	}
 	portChan = make(chan int)
 	doneChan = make(chan struct{})
 	exitChan = make(chan struct{})
@@ -30,8 +37,11 @@ func TestMain(m *testing.M) {
 		Timeout: 5 * time.Second,
 	}
 
+	config := config.Config{}
+	config.RegisterQueries(db)
+
 	go func(portChan chan int, doneChan chan struct{}) {
-		InitServer(true, portChan, doneChan, exitChan, http.Dir(".."))
+		InitServer(true, portChan, doneChan, exitChan, http.Dir(".."), config)
 	}(portChan, doneChan)
 	//Init on server has to be done on separate goroutine, so as to not block
 

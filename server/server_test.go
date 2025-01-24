@@ -1,6 +1,8 @@
 package server
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -12,6 +14,8 @@ import (
 
 	"github.com/sohWenMing/finance_server/config"
 	database "github.com/sohWenMing/finance_server/internal/database/connection"
+	"github.com/sohWenMing/finance_server/internal/database/sqlc_generated"
+	usermapping "github.com/sohWenMing/finance_server/mapping/user_mapping"
 	testhelpers "github.com/sohWenMing/finance_server/test_helpers"
 )
 
@@ -30,6 +34,7 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer db.Close()
 	portChan = make(chan int)
 	doneChan = make(chan struct{})
 	exitChan = make(chan struct{})
@@ -85,6 +90,25 @@ func TestFileServer(t *testing.T) {
 	}
 }
 
-// func TestFileSever(t *testing.T) {
+func TestCreateUserHandler(t *testing.T) {
 
-// }
+	path := fmt.Sprintf("%s/createUser", basePath)
+	createUserReqBody := usermapping.CreateUserJSON{
+		Email:    "test-user",
+		Password: "password",
+	}
+	bodyString, err := json.Marshal(createUserReqBody)
+	testhelpers.AssertNoError(t, err)
+	req, err := http.NewRequest(http.MethodPost, path, bytes.NewReader(bodyString))
+	testhelpers.AssertNoError(t, err)
+	res, err := client.Do(req)
+	testhelpers.AssertNoError(t, err)
+
+	returnedUser := sqlc_generated.User{}
+
+	decoder := json.NewDecoder(res.Body)
+	jsonDecodeErr := decoder.Decode(&returnedUser)
+
+	testhelpers.AssertNoError(t, jsonDecodeErr)
+	testhelpers.AssertStringVals(t, returnedUser.Email, createUserReqBody.Email)
+}

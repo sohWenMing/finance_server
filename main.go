@@ -35,4 +35,5 @@ func main() {
 	go programio.InitStdoutExit(doneChan)
 	<-exitChan
 	fmt.Print("program successfully exited")
+
 }

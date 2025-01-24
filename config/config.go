@@ -29,6 +29,10 @@ func (c *Config) PingHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("OK"))
 }
 
+func (c *Config) CreateUserHandler(w http.ResponseWriter, r *http.Request) {
+
+}
+
 func (c *Config) FileServerMiddleWare(fileServerHandler http.Handler) http.Handler {
 	return fsMiddleWareGenerator(fileServerHandler)
 }

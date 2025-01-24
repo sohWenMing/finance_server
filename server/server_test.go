@@ -14,7 +14,6 @@ import (
 
 	"github.com/sohWenMing/finance_server/config"
 	database "github.com/sohWenMing/finance_server/internal/database/connection"
-	"github.com/sohWenMing/finance_server/internal/database/sqlc_generated"
 	usermapping "github.com/sohWenMing/finance_server/mapping/user_mapping"
 	testhelpers "github.com/sohWenMing/finance_server/test_helpers"
 )
@@ -99,16 +98,15 @@ func TestCreateUserHandler(t *testing.T) {
 	}
 	bodyString, err := json.Marshal(createUserReqBody)
 	testhelpers.AssertNoError(t, err)
-	req, err := http.NewRequest(http.MethodPost, path, bytes.NewReader(bodyString))
-	testhelpers.AssertNoError(t, err)
-	res, err := client.Do(req)
-	testhelpers.AssertNoError(t, err)
-
-	returnedUser := sqlc_generated.User{}
+	req, reqErr := http.NewRequest(http.MethodPost, path, bytes.NewReader(bodyString))
+	testhelpers.AssertNoError(t, reqErr)
+	res, resErr := client.Do(req)
+	testhelpers.AssertNoError(t, resErr)
+	var responseJson usermapping.CreatedUserResponse
 
 	decoder := json.NewDecoder(res.Body)
-	jsonDecodeErr := decoder.Decode(&returnedUser)
+	jsonDecodeErr := decoder.Decode(&responseJson)
 
 	testhelpers.AssertNoError(t, jsonDecodeErr)
-	testhelpers.AssertStringVals(t, returnedUser.Email, createUserReqBody.Email)
+	testhelpers.AssertBool(t, responseJson.IsSuccess, true)
 }

@@ -2,9 +2,11 @@ package config
 
 import (
 	"database/sql"
+	"encoding/json"
 	"net/http"
 
 	"github.com/sohWenMing/finance_server/internal/database/sqlc_generated"
+	usermapping "github.com/sohWenMing/finance_server/mapping/user_mapping"
 )
 
 /*
@@ -30,6 +32,27 @@ func (c *Config) PingHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *Config) CreateUserHandler(w http.ResponseWriter, r *http.Request) {
+	var bodyJson usermapping.CreateUserJSON
+	decoder := json.NewDecoder(r.Body)
+	jsonDecodeErr := decoder.Decode(&bodyJson)
+	if jsonDecodeErr != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	createdUserResJson := usermapping.CreatedUserResponse{
+		IsSuccess: true,
+	}
+
+	bodyString, err := json.Marshal(createdUserResJson)
+	if err != nil {
+		w.WriteHeader(500)
+		return
+	}
+
+	w.WriteHeader(200)
+	w.Header().Set("content-type", "application/json")
+	w.Write([]byte(bodyString))
 
 }
 

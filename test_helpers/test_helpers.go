@@ -24,5 +24,11 @@ func AssertStringVals(t *testing.T, got, want string) {
 	if got != want {
 		t.Errorf("got: %s\nwant: %s", got, want)
 	}
+}
 
+func AssertBool(t *testing.T, got, want bool) {
+
+	if got != want {
+		t.Errorf("got: %t\nwant: %t", got, want)
+	}
 }

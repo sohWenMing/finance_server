@@ -2,7 +2,6 @@ package auth
 
 import (
 	"errors"
-	"fmt"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -19,7 +18,5 @@ func GenerateHashedPassword(password string) (hashedPassword string, err error) 
 func CheckHashedPassword(password, hashedPassword string) (err error) {
 	passwordInBytes := []byte(password)
 	hashedPasswordInBytes := []byte(hashedPassword)
-	checkErr := bcrypt.CompareHashAndPassword(hashedPasswordInBytes, passwordInBytes)
-	fmt.Printf("checkErr: %v\n", checkErr)
 	return bcrypt.CompareHashAndPassword(hashedPasswordInBytes, passwordInBytes)
 }

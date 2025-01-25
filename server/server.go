@@ -21,6 +21,7 @@ func InitServer(isTest bool, portChan chan<- int, doneChan <-chan struct{}, exit
 	mux.HandleFunc("GET /ping", config.PingHandler)
 	mux.Handle("GET /app/", http.StripPrefix("/app", config.FileServerMiddleWare(http.FileServer(root))))
 	mux.HandleFunc("POST /createUser", config.CreateUserHandler)
+	mux.HandleFunc("POST /loginUser", config.LoginUserHandler)
 	server := &http.Server{
 		Handler: mux,
 	}

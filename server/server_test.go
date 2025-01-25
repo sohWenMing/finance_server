@@ -94,8 +94,94 @@ func TestFileServer(t *testing.T) {
 
 func TestCreateUserHandler(t *testing.T) {
 
-	path := fmt.Sprintf("%s/createUser", basePath)
-	createUserReqBody := usermapping.CreateUserJSON{
+	createUserPath := fmt.Sprintf("%s/createUser", basePath)
+	createUserReqBody, responseJson, shouldReturn := createAndRetrieveUser(t, createUserPath)
+	if shouldReturn {
+		return
+	}
+	userIdUUID, err := uuid.Parse(responseJson.UserId)
+	defer testConfig.Queries.DeleteUserById(context.Background(), userIdUUID)
+	testhelpers.AssertNoError(t, err)
+	retrievedUser, err := testConfig.Queries.GetUserById(context.Background(), userIdUUID)
+	testhelpers.AssertNoError(t, err)
+	testhelpers.AssertStringVals(t, retrievedUser.Email, createUserReqBody.Email)
+}
+
+func TestLoginUserHandler(t *testing.T) {
+	createUserPath := fmt.Sprintf("%s/createUser", basePath)
+
+	type testStruct struct {
+		name         string
+		isExpectPass bool
+	}
+
+	tests := []testStruct{
+		{
+			name:         "test login user should pass",
+			isExpectPass: true,
+		},
+		{
+			name:         "test login user should fail",
+			isExpectPass: false,
+		},
+	}
+	for _, test := range tests {
+		runLoginTest(t, createUserPath, test.isExpectPass)
+	}
+}
+
+func runLoginTest(t *testing.T, createUserPath string, isExpectPass bool) {
+	createUserReqBody, responseJson, shouldReturn := createAndRetrieveUser(t, createUserPath)
+	if shouldReturn {
+		return
+	}
+
+	userIdUUID, err := uuid.Parse(responseJson.UserId)
+	testhelpers.AssertNoError(t, err)
+	if err != nil {
+		return
+	}
+	defer testConfig.Queries.DeleteUserById(context.Background(), userIdUUID)
+	loginUserPath := fmt.Sprintf("%s/loginUser", basePath)
+	if !isExpectPass {
+		createUserReqBody.Password = createUserReqBody.Password + "add fail"
+	}
+	bodyString, err := json.Marshal(createUserReqBody)
+	testhelpers.AssertNoError(t, err)
+	if err != nil {
+		return
+	}
+	req, err := http.NewRequest(http.MethodPost, loginUserPath, bytes.NewReader(bodyString))
+	testhelpers.AssertNoError(t, err)
+	if err != nil {
+		return
+	}
+	res, err := client.Do(req)
+	testhelpers.AssertNoError(t, err)
+	if err != nil {
+		return
+	}
+
+	switch isExpectPass {
+	case true:
+		testhelpers.AssertIntVals(t, res.StatusCode, 200)
+		var loginResponseJson usermapping.LoginResponse
+		decoder := json.NewDecoder(res.Body)
+		decodeErr := decoder.Decode(&loginResponseJson)
+		testhelpers.AssertNoError(t, decodeErr)
+		if decodeErr != nil {
+			return
+		}
+		testhelpers.AssertStringVals(t, loginResponseJson.AccessToken, "placeholder_access_token")
+		testhelpers.AssertBool(t, loginResponseJson.IsSuccess, true)
+		return
+	case false:
+		testhelpers.AssertIntVals(t, res.StatusCode, 401)
+	}
+}
+
+func createAndRetrieveUser(t *testing.T, path string) (usermapping.UserJSON, usermapping.CreatedUserResponse, bool) {
+	createUserReqBody := usermapping.UserJSON{
 		Email:    "wenming.soh@gmail.com",
 		Password: "password",
 	}
@@ -106,12 +192,12 @@ func TestCreateUserHandler(t *testing.T) {
 	req, reqErr := http.NewRequest(http.MethodPost, path, bytes.NewReader(bodyString))
 	testhelpers.AssertNoError(t, reqErr)
 	if reqErr != nil {
-		return
+		return usermapping.UserJSON{}, usermapping.CreatedUserResponse{}, true
 	}
 	res, resErr := client.Do(req)
 	testhelpers.AssertNoError(t, resErr)
 	if resErr != nil {
-		return
+		return usermapping.UserJSON{}, usermapping.CreatedUserResponse{}, true
 	}
 	var responseJson usermapping.CreatedUserResponse
 
@@ -120,13 +206,8 @@ func TestCreateUserHandler(t *testing.T) {
 
 	testhelpers.AssertNoError(t, jsonDecodeErr)
 	if jsonDecodeErr != nil {
-		return
+		return usermapping.UserJSON{}, usermapping.CreatedUserResponse{}, true
 	}
 	testhelpers.AssertBool(t, responseJson.IsSuccess, true)
-	userIdUUID, err := uuid.Parse(responseJson.UserId)
-	testhelpers.AssertNoError(t, err)
-	retrievedUser, err := testConfig.Queries.GetUserById(context.Background(), userIdUUID)
-	testhelpers.AssertNoError(t, err)
-	testhelpers.AssertStringVals(t, retrievedUser.Email, createUserReqBody.Email)
-	testConfig.Queries.DeleteUserById(context.Background(), userIdUUID)
+	return createUserReqBody, responseJson, false
 }

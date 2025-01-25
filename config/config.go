@@ -37,11 +37,8 @@ func (c *Config) PingHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *Config) CreateUserHandler(w http.ResponseWriter, r *http.Request) {
-	var bodyJson usermapping.CreateUserJSON
-	decoder := json.NewDecoder(r.Body)
-	jsonDecodeErr := decoder.Decode(&bodyJson)
-	if jsonDecodeErr != nil {
-		w.WriteHeader(http.StatusBadRequest)
+	bodyJson, shouldReturn := processUserBodyToJSON(r, w)
+	if shouldReturn {
 		return
 	}
 	// after decoding, then try to encrypt the password and return hashed password using BCrypt
@@ -86,6 +83,36 @@ func (c *Config) CreateUserHandler(w http.ResponseWriter, r *http.Request) {
 
 }
 
+func (c *Config) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
+	bodyJson, shouldReturn := processUserBodyToJSON(r, w)
+	if shouldReturn {
+		return
+	}
+	user, dbErr := c.Queries.GetUserByEmail(context.Background(), bodyJson.Email)
+	if dbErr != nil {
+		writerInteralError(w)
+		return
+	}
+	compareHashErr := auth.CheckHashedPassword(bodyJson.Password, user.HashedPassword)
+	if compareHashErr != nil {
+		writeUnauthorizedError(w, "email and password do not match")
+		return
+	}
+	w.WriteHeader(200)
+	w.Header().Set("content-type", "application/json")
+
+	responseJson := usermapping.LoginResponse{
+		IsSuccess:   true,
+		AccessToken: "placeholder_access_token",
+	}
+	resBytes, marshalErr := json.Marshal(responseJson)
+	if marshalErr != nil {
+		writerInteralError(w)
+	}
+	w.Write([]byte(resBytes))
+
+}
+
 func (c *Config) FileServerMiddleWare(fileServerHandler http.Handler) http.Handler {
 	return fsMiddleWareGenerator(fileServerHandler)
 }
@@ -107,4 +134,21 @@ func writerInteralError(w http.ResponseWriter) {
 	w.WriteHeader(500)
 	w.Header().Set("content-type", "text/plain")
 	w.Write([]byte("500: Internal Error"))
+}
+
+func writeUnauthorizedError(w http.ResponseWriter, response string) {
+	w.WriteHeader(http.StatusUnauthorized)
+	w.Header().Set("content-type", "text/plain")
+	w.Write([]byte(response))
+}
+
+func processUserBodyToJSON(r *http.Request, w http.ResponseWriter) (usermapping.UserJSON, bool) {
+	var bodyJson usermapping.UserJSON
+	decoder := json.NewDecoder(r.Body)
+	jsonDecodeErr := decoder.Decode(&bodyJson)
+	if jsonDecodeErr != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return usermapping.UserJSON{}, true
+	}
+	return bodyJson, false
 }

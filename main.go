@@ -11,9 +11,11 @@ import (
 	"github.com/sohWenMing/finance_server/server"
 )
 
+const k = ".env"
+
 func main() {
 
-	db, err := database.ConnectToDB(".env")
+	db, err := database.ConnectToDB(k)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -23,7 +25,11 @@ func main() {
 
 	config := config.Config{}
 	config.RegisterQueries(db)
+	registerJWTSecretErr := config.RegisterJwtSecret(k)
 	//init the config, register all the queries and connect to the database
+	if registerJWTSecretErr != nil {
+		log.Fatal(registerJWTSecretErr)
+	}
 
 	portChan := make(chan int)
 	doneChan := make(chan struct{})

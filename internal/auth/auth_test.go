@@ -4,9 +4,12 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	testhelpers "github.com/sohWenMing/finance_server/test_helpers"
 )
+
+var testJWTSecret []byte = []byte("this is the test jwt secret")
 
 func TestGenerateHashedPassword(t *testing.T) {
 	type testStruct struct {
@@ -116,6 +119,65 @@ func TestCheckHashedPassword(t *testing.T) {
 	}
 }
 
+func TestGenerateJWTToken(t *testing.T) {
+	signedString, shouldReturn := generateTestToken(t, 10*time.Second)
+	if shouldReturn {
+		return
+	}
+	if signedString == "" {
+		t.Errorf("signedString returned should not be empty string")
+		return
+	}
+}
+
+func TestValidateAndReturnJWTToken(t *testing.T) {
+	type testStruct struct {
+		name          string
+		validity      time.Duration
+		isExpectError bool
+	}
+	tests := []testStruct{
+		{
+			"test should pass, token should be valid at time of checking",
+			20 * time.Second,
+			false,
+		},
+		{
+			"test should fail, token should not be valid at time of checking",
+			0 * time.Second,
+			true,
+		},
+	}
+	for _, test := range tests {
+		signedString, shouldReturn := generateTestToken(t, test.validity)
+		if shouldReturn {
+			return
+		}
+		claims, err := ValidateAndReturnClaims(testJWTSecret, signedString)
+
+		switch test.isExpectError {
+		case false:
+			testhelpers.AssertNoError(t, err)
+			if err != nil {
+				return
+			}
+			testhelpers.AssertBool(t, claims.IsAdmin, false)
+			testhelpers.AssertStringVals(t, claims.UserId, "user_id")
+		case true:
+			testhelpers.AssertHasError(t, err)
+		}
+	}
+}
+
+func generateTestToken(t *testing.T, validity time.Duration) (string, bool) {
+	signedString, err := GenerateJWTToken("user_id", false, validity, testJWTSecret)
+	testhelpers.AssertNoError(t, err)
+	if err != nil {
+		return "", true
+	}
+	return signedString, false
+}
+
 func changeHashedPassword(hashedPassword string) (changedHashPassword string) {
 	startChar := 1
 	lastCharIndex := len(hashedPassword) - 1
@@ -123,7 +185,5 @@ func changeHashedPassword(hashedPassword string) (changedHashPassword string) {
 		startChar += 1
 	}
 	changedHashPassword = hashedPassword[:lastCharIndex] + fmt.Sprintf("%d", startChar)
-	fmt.Printf("hashedPassword: %s\n", hashedPassword)
-	fmt.Printf("changedHashPassword: %s\n", changedHashPassword)
 	return changedHashPassword
 }

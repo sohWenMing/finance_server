@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/google/uuid"
+	envvars "github.com/sohWenMing/finance_server/env_vars"
 	"github.com/sohWenMing/finance_server/internal/auth"
 	"github.com/sohWenMing/finance_server/internal/database/sqlc_generated"
 	usermapping "github.com/sohWenMing/finance_server/mapping/user_mapping"
@@ -23,7 +25,18 @@ import (
 */
 
 type Config struct {
-	Queries *sqlc_generated.Queries
+	Queries   *sqlc_generated.Queries
+	JwtSecret []byte
+}
+
+func (c *Config) RegisterJwtSecret(envPath string) error {
+	envVarErr := envvars.LoadEnv(envPath)
+	if envVarErr != nil {
+		return envVarErr
+	}
+	secret := os.Getenv("JWT_SECRET")
+	c.JwtSecret = []byte(secret)
+	return nil
 }
 
 func (c *Config) RegisterQueries(db *sql.DB) {

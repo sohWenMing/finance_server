@@ -7,7 +7,53 @@ package sqlc_generated
 
 import (
 	"context"
+	"time"
+
+	"github.com/google/uuid"
 )
+
+const createUser = `-- name: CreateUser :one
+INSERT INTO users (id, email, hashed_password, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, email, hashed_password, created_at, updated_at
+`
+
+type CreateUserParams struct {
+	ID             uuid.UUID
+	Email          string
+	HashedPassword string
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
+func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
+	row := q.db.QueryRowContext(ctx, createUser,
+		arg.ID,
+		arg.Email,
+		arg.HashedPassword,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.HashedPassword,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const deleteUserById = `-- name: DeleteUserById :exec
+DELETE from users
+WHERE id = $1
+`
+
+func (q *Queries) DeleteUserById(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, deleteUserById, id)
+	return err
+}
 
 const getUser = `-- name: GetUser :many
 SELECT id, email, hashed_password, created_at, updated_at from users
@@ -40,4 +86,22 @@ func (q *Queries) GetUser(ctx context.Context) ([]User, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const getUserById = `-- name: GetUserById :one
+SELECT id, email, hashed_password, created_at, updated_at from users
+WHERE id = $1
+`
+
+func (q *Queries) GetUserById(ctx context.Context, id uuid.UUID) (User, error) {
+	row := q.db.QueryRowContext(ctx, getUserById, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.HashedPassword,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }

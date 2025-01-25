@@ -2,7 +2,6 @@ package database
 
 import (
 	"database/sql"
-	"fmt"
 	"os"
 
 	_ "github.com/lib/pq"
@@ -22,12 +21,10 @@ func ConnectToDB(envPath string) (*sql.DB, error) {
 	if envVarErr != nil {
 		return nil, envVarErr
 	}
-	DbString := os.Getenv("DB_STRING")
-
+	DbString := os.Getenv("DB_FINANCE")
 	db, err := connect(DbString)
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println("Db Connection started")
 	return db, nil
 }

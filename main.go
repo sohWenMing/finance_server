@@ -17,6 +17,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	fmt.Println("DB Connection started")
 	defer db.Close()
 	// init the server, send up channels
 
@@ -35,4 +36,5 @@ func main() {
 	go programio.InitStdoutExit(doneChan)
 	<-exitChan
 	fmt.Print("program successfully exited")
+
 }

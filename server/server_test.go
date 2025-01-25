@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/sohWenMing/finance_server/config"
 	database "github.com/sohWenMing/finance_server/internal/database/connection"
 	usermapping "github.com/sohWenMing/finance_server/mapping/user_mapping"
@@ -27,13 +29,15 @@ var (
 	basePath     string
 )
 
+var testConfig = config.Config{}
+
 func TestMain(m *testing.M) {
 
 	db, err := database.ConnectToDB("../.env")
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer db.Close()
+	// defer db.Close()
 	portChan = make(chan int)
 	doneChan = make(chan struct{})
 	exitChan = make(chan struct{})
@@ -41,11 +45,10 @@ func TestMain(m *testing.M) {
 		Timeout: 5 * time.Second,
 	}
 
-	config := config.Config{}
-	config.RegisterQueries(db)
+	testConfig.RegisterQueries(db)
 
 	go func(portChan chan int, doneChan chan struct{}) {
-		InitServer(true, portChan, doneChan, exitChan, http.Dir(".."), config)
+		InitServer(true, portChan, doneChan, exitChan, http.Dir(".."), testConfig)
 	}(portChan, doneChan)
 	//Init on server has to be done on separate goroutine, so as to not block
 
@@ -93,20 +96,37 @@ func TestCreateUserHandler(t *testing.T) {
 
 	path := fmt.Sprintf("%s/createUser", basePath)
 	createUserReqBody := usermapping.CreateUserJSON{
-		Email:    "test-user",
+		Email:    "wenming.soh@gmail.com",
 		Password: "password",
 	}
+
 	bodyString, err := json.Marshal(createUserReqBody)
 	testhelpers.AssertNoError(t, err)
+
 	req, reqErr := http.NewRequest(http.MethodPost, path, bytes.NewReader(bodyString))
 	testhelpers.AssertNoError(t, reqErr)
+	if reqErr != nil {
+		return
+	}
 	res, resErr := client.Do(req)
 	testhelpers.AssertNoError(t, resErr)
+	if resErr != nil {
+		return
+	}
 	var responseJson usermapping.CreatedUserResponse
 
 	decoder := json.NewDecoder(res.Body)
 	jsonDecodeErr := decoder.Decode(&responseJson)
 
 	testhelpers.AssertNoError(t, jsonDecodeErr)
+	if jsonDecodeErr != nil {
+		return
+	}
 	testhelpers.AssertBool(t, responseJson.IsSuccess, true)
+	userIdUUID, err := uuid.Parse(responseJson.UserId)
+	testhelpers.AssertNoError(t, err)
+	retrievedUser, err := testConfig.Queries.GetUserById(context.Background(), userIdUUID)
+	testhelpers.AssertNoError(t, err)
+	testhelpers.AssertStringVals(t, retrievedUser.Email, createUserReqBody.Email)
+	testConfig.Queries.DeleteUserById(context.Background(), userIdUUID)
 }

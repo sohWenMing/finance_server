@@ -7,4 +7,5 @@ type CreateUserJSON struct {
 
 type CreatedUserResponse struct {
 	IsSuccess bool
+	UserId    string
 }

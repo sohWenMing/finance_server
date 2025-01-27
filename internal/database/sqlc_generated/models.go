@@ -10,8 +10,22 @@ import (
 	"github.com/google/uuid"
 )
 
+type BalanceSheet struct {
+	ID                           uuid.UUID
+	Ticker                       string
+	FiscalDateEnding             time.Time
+	TotalAssets                  int64
+	IntangibleAssets             int64
+	TotalLiabilities             int64
+	CommonStock                  int64
+	CommonStockSharesOutstanding int64
+	CreatedOn                    time.Time
+	UpdatedOn                    time.Time
+}
+
 type User struct {
 	ID             uuid.UUID
+	IsAdmin        bool
 	Email          string
 	HashedPassword string
 	CreatedAt      time.Time

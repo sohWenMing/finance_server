@@ -13,13 +13,14 @@ import (
 )
 
 const createUser = `-- name: CreateUser :one
-INSERT INTO users (id, email, hashed_password, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id, email, hashed_password, created_at, updated_at
+INSERT INTO users (id, is_admin, email, hashed_password, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, is_admin, email, hashed_password, created_at, updated_at
 `
 
 type CreateUserParams struct {
 	ID             uuid.UUID
+	IsAdmin        bool
 	Email          string
 	HashedPassword string
 	CreatedAt      time.Time
@@ -29,6 +30,7 @@ type CreateUserParams struct {
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
 	row := q.db.QueryRowContext(ctx, createUser,
 		arg.ID,
+		arg.IsAdmin,
 		arg.Email,
 		arg.HashedPassword,
 		arg.CreatedAt,
@@ -37,6 +39,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 	var i User
 	err := row.Scan(
 		&i.ID,
+		&i.IsAdmin,
 		&i.Email,
 		&i.HashedPassword,
 		&i.CreatedAt,
@@ -56,7 +59,7 @@ func (q *Queries) DeleteUserById(ctx context.Context, id uuid.UUID) error {
 }
 
 const getUser = `-- name: GetUser :many
-SELECT id, email, hashed_password, created_at, updated_at from users
+SELECT id, is_admin, email, hashed_password, created_at, updated_at from users
 `
 
 func (q *Queries) GetUser(ctx context.Context) ([]User, error) {
@@ -70,6 +73,7 @@ func (q *Queries) GetUser(ctx context.Context) ([]User, error) {
 		var i User
 		if err := rows.Scan(
 			&i.ID,
+			&i.IsAdmin,
 			&i.Email,
 			&i.HashedPassword,
 			&i.CreatedAt,
@@ -89,7 +93,7 @@ func (q *Queries) GetUser(ctx context.Context) ([]User, error) {
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, hashed_password, created_at, updated_at from users
+SELECT id, is_admin, email, hashed_password, created_at, updated_at from users
 where email = $1
 `
 
@@ -98,6 +102,7 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 	var i User
 	err := row.Scan(
 		&i.ID,
+		&i.IsAdmin,
 		&i.Email,
 		&i.HashedPassword,
 		&i.CreatedAt,
@@ -107,7 +112,7 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 }
 
 const getUserById = `-- name: GetUserById :one
-SELECT id, email, hashed_password, created_at, updated_at from users
+SELECT id, is_admin, email, hashed_password, created_at, updated_at from users
 WHERE id = $1
 `
 
@@ -116,6 +121,7 @@ func (q *Queries) GetUserById(ctx context.Context, id uuid.UUID) (User, error) {
 	var i User
 	err := row.Scan(
 		&i.ID,
+		&i.IsAdmin,
 		&i.Email,
 		&i.HashedPassword,
 		&i.CreatedAt,

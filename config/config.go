@@ -66,6 +66,7 @@ func (c *Config) CreateUserHandler(w http.ResponseWriter, r *http.Request) {
 
 	params := sqlc_generated.CreateUserParams{
 		ID:             uuid.New(),
+		IsAdmin:        false,
 		Email:          bodyJson.Email,
 		HashedPassword: hashedPassword,
 		CreatedAt:      time.Now(),
@@ -114,9 +115,15 @@ func (c *Config) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(200)
 	w.Header().Set("content-type", "application/json")
 
+	tokenString, err := auth.GenerateJWTToken(user.ID.String(), false, 20*time.Minute, c.JwtSecret)
+	if err != nil {
+		writerInteralError(w)
+		return
+	}
+
 	responseJson := usermapping.LoginResponse{
 		IsSuccess:   true,
-		AccessToken: "placeholder_access_token",
+		AccessToken: tokenString,
 	}
 	resBytes, marshalErr := json.Marshal(responseJson)
 	if marshalErr != nil {

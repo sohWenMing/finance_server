@@ -15,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sohWenMing/finance_server/config"
+	"github.com/sohWenMing/finance_server/internal/auth"
 	database "github.com/sohWenMing/finance_server/internal/database/connection"
 	usermapping "github.com/sohWenMing/finance_server/mapping/user_mapping"
 	testhelpers "github.com/sohWenMing/finance_server/test_helpers"
@@ -46,6 +47,7 @@ func TestMain(m *testing.M) {
 	}
 
 	testConfig.RegisterQueries(db)
+	testConfig.RegisterJwtSecret("./.env")
 
 	go func(portChan chan int, doneChan chan struct{}) {
 		InitServer(true, portChan, doneChan, exitChan, http.Dir(".."), testConfig)
@@ -165,6 +167,7 @@ func runLoginTest(t *testing.T, createUserPath string, isExpectPass bool) {
 	switch isExpectPass {
 	case true:
 		testhelpers.AssertIntVals(t, res.StatusCode, 200)
+
 		var loginResponseJson usermapping.LoginResponse
 		decoder := json.NewDecoder(res.Body)
 		decodeErr := decoder.Decode(&loginResponseJson)
@@ -172,8 +175,16 @@ func runLoginTest(t *testing.T, createUserPath string, isExpectPass bool) {
 		if decodeErr != nil {
 			return
 		}
-		testhelpers.AssertStringVals(t, loginResponseJson.AccessToken, "placeholder_access_token")
+
 		testhelpers.AssertBool(t, loginResponseJson.IsSuccess, true)
+
+		token, err := auth.ValidateAndReturnClaims(testConfig.JwtSecret, loginResponseJson.AccessToken)
+		testhelpers.AssertNoError(t, err)
+		if err != nil {
+			return
+		}
+		testhelpers.AssertStringVals(t, responseJson.UserId, token.UserId)
+		testhelpers.AssertBool(t, token.IsAdmin, false)
 		return
 	case false:
 		testhelpers.AssertIntVals(t, res.StatusCode, 401)

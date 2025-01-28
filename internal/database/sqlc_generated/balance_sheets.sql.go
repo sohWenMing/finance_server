@@ -70,3 +70,52 @@ func (q *Queries) CreateBalanceSheetRecord(ctx context.Context, arg CreateBalanc
 	)
 	return i, err
 }
+
+const deleteBalanceSheetRecordsByTicker = `-- name: DeleteBalanceSheetRecordsByTicker :exec
+DELETE from balance_sheets
+WHERE ticker = $1
+`
+
+func (q *Queries) DeleteBalanceSheetRecordsByTicker(ctx context.Context, ticker string) error {
+	_, err := q.db.ExecContext(ctx, deleteBalanceSheetRecordsByTicker, ticker)
+	return err
+}
+
+const getBalanceSheetRecordsByTicker = `-- name: GetBalanceSheetRecordsByTicker :many
+SELECT id, ticker, fiscal_date_ending, total_assets, intangible_assets, total_liabilities, common_stock, common_stock_shares_outstanding, created_on, updated_on from balance_sheets
+WHERE ticker = $1
+`
+
+func (q *Queries) GetBalanceSheetRecordsByTicker(ctx context.Context, ticker string) ([]BalanceSheet, error) {
+	rows, err := q.db.QueryContext(ctx, getBalanceSheetRecordsByTicker, ticker)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BalanceSheet
+	for rows.Next() {
+		var i BalanceSheet
+		if err := rows.Scan(
+			&i.ID,
+			&i.Ticker,
+			&i.FiscalDateEnding,
+			&i.TotalAssets,
+			&i.IntangibleAssets,
+			&i.TotalLiabilities,
+			&i.CommonStock,
+			&i.CommonStockSharesOutstanding,
+			&i.CreatedOn,
+			&i.UpdatedOn,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

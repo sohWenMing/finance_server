@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/sohWenMing/finance_server/config"
+	"github.com/sohWenMing/finance_server/handlers"
 )
 
 func InitServer(isTest bool, portChan chan<- int, doneChan <-chan struct{}, exitChan chan<- struct{}, root http.FileSystem, config config.Config) {
@@ -18,10 +19,10 @@ func InitServer(isTest bool, portChan chan<- int, doneChan <-chan struct{}, exit
 	//for testing purposes, usually will listen at port :8080, but if testing sets port to 0 so that random available port will be used
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /ping", config.PingHandler)
-	mux.Handle("GET /app/", http.StripPrefix("/app", config.FileServerMiddleWare(http.FileServer(root))))
-	mux.HandleFunc("POST /createUser", config.CreateUserHandler)
-	mux.HandleFunc("POST /loginUser", config.LoginUserHandler)
+	mux.HandleFunc("GET /ping", handlers.PingHandler)
+	mux.Handle("GET /app/", http.StripPrefix("/app", handlers.FileServerMiddleWare(http.FileServer(root))))
+	mux.HandleFunc("POST /createUser", handlers.CreateUserHandler(config.Queries))
+	mux.HandleFunc("POST /loginUser", handlers.LoginUserHandler(config.Queries, config.JwtSecret))
 	server := &http.Server{
 		Handler: mux,
 	}

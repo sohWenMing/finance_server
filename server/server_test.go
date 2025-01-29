@@ -102,11 +102,50 @@ func TestCreateUserHandler(t *testing.T) {
 		return
 	}
 	userIdUUID, err := uuid.Parse(responseJson.UserId)
-	defer testConfig.Queries.DeleteUserById(context.Background(), userIdUUID)
+
 	testhelpers.AssertNoError(t, err)
+	if err != nil {
+		return
+	}
+	defer testConfig.Queries.DeleteUserById(context.Background(), userIdUUID)
+	// at this point if there is no error and the test function has not returned, user has already been created. defer the deleting of this user
+
 	retrievedUser, err := testConfig.Queries.GetUserById(context.Background(), userIdUUID)
 	testhelpers.AssertNoError(t, err)
+	if err != nil {
+		return
+	}
 	testhelpers.AssertStringVals(t, retrievedUser.Email, createUserReqBody.Email)
+	//retrieve the user from the database, assert that the email of the user is as per what was entered
+
+	/*
+		now run another test to ensure that another user cannot be created with the same email. check function createAndRetrieveUser below, to
+		see the definition of the initial struct
+	*/
+	userWithDupEmail := usermapping.UserJSON{
+		Email:    "wenming.soh@gmail.com",
+		Password: "password",
+	}
+
+	bodyString, err := json.Marshal(userWithDupEmail)
+	testhelpers.AssertNoError(t, err)
+	if err != nil {
+		return
+	}
+	req, err := http.NewRequest(http.MethodPost, createUserPath, bytes.NewReader(bodyString))
+	testhelpers.AssertNoError(t, err)
+	if err != nil {
+		return
+	}
+	res, err := client.Do(req)
+	if err != nil {
+		return
+	}
+	bodyBytes, err := io.ReadAll(res.Body)
+	if err != nil {
+		return
+	}
+	testhelpers.AssertStringVals(t, string(bodyBytes), "email wenming.soh@gmail.com is already being used")
 }
 
 func TestLoginUserHandler(t *testing.T) {

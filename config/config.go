@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	envvars "github.com/sohWenMing/finance_server/env_vars"
+	errorutils "github.com/sohWenMing/finance_server/error_utils"
 	"github.com/sohWenMing/finance_server/internal/auth"
 	"github.com/sohWenMing/finance_server/internal/database/sqlc_generated"
 	usermapping "github.com/sohWenMing/finance_server/mapping/user_mapping"
@@ -73,11 +75,39 @@ func (c *Config) CreateUserHandler(w http.ResponseWriter, r *http.Request) {
 		UpdatedAt:      time.Now(),
 	}
 
-	user, checkErr := c.Queries.CreateUser(context.Background(), params)
-	if checkErr != nil {
-		fmt.Printf("error in checkErr: %v\n", checkErr)
-		writerInteralError(w)
-		return
+	var user sqlc_generated.User
+
+	/*
+		in a loop, check to see if the attempted creation of the user returns any errors
+		in the event that an error is returned, then we need to check if the error is a unique constaint violation
+		if it is a unique violation there are two possible cases:
+			1 - the uuid has been duplicated. while this is rare, it should still be a case that is handled by creating a new uuid
+			2 - the email has been duplicated. in which case, we should just be returning the error and alerting the user
+	*/
+	for {
+		createdUser, checkErr := c.Queries.CreateUser(context.Background(), params)
+		if checkErr != nil {
+			isUniqueViolation, pqErr, _ := errorutils.CheckIsUniqueConstraintPqError(checkErr)
+			//first check to see if the violation is due to a violation of a unique constraint
+			switch isUniqueViolation {
+			case true:
+				if strings.Contains(pqErr.Message, "unique_user_id") {
+					params.ID = uuid.New()
+					continue
+				}
+				w.WriteHeader(http.StatusConflict)
+				w.Header().Set("content-type", "text/plain")
+				w.Write([]byte(fmt.Sprintf("email %s is already being used", params.Email)))
+				return
+			case false:
+				writerInteralError(w)
+				return
+				//if the error returned is not due to a unique constraint, then it is due to internal error, return 500
+			}
+		}
+		user = createdUser
+		break
+
 	}
 	// if there is a problem with craating the user in the database, then 500 and early return
 	createdUserResJson := usermapping.CreatedUserResponse{
@@ -112,8 +142,6 @@ func (c *Config) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 		writeUnauthorizedError(w, "email and password do not match")
 		return
 	}
-	w.WriteHeader(200)
-	w.Header().Set("content-type", "application/json")
 
 	tokenString, err := auth.GenerateJWTToken(user.ID.String(), false, 20*time.Minute, c.JwtSecret)
 	if err != nil {
@@ -129,6 +157,8 @@ func (c *Config) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 	if marshalErr != nil {
 		writerInteralError(w)
 	}
+	w.WriteHeader(200)
+	w.Header().Set("content-type", "application/json")
 	w.Write([]byte(resBytes))
 
 }

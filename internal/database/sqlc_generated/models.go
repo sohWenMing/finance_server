@@ -23,6 +23,14 @@ type BalanceSheet struct {
 	UpdatedOn                    time.Time
 }
 
+type RefreshToken struct {
+	ID        uuid.UUID
+	Token     string
+	ExpiresOn time.Time
+	CreatedOn time.Time
+	UpdatedOn time.Time
+}
+
 type User struct {
 	ID             uuid.UUID
 	IsAdmin        bool

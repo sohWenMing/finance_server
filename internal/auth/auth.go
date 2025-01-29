@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"time"
 
@@ -70,4 +72,24 @@ func ValidateAndReturnClaims(secret []byte, tokenString string) (returnedClaims 
 		return returnedClaims, nil
 	}
 	return returnedClaims, errors.New("falsed to parse or invalid token")
+}
+
+func GenerateRefreshToken() (refreshToken string, writtenByteSlice []byte, err error) {
+	allocated := make([]byte, 16)
+	//allocate memory for a slice of 16 bytes
+	generateErr := generateRandBytes(allocated)
+	if generateErr != nil {
+		return refreshToken, []byte{}, generateErr
+	}
+	return hex.EncodeToString(allocated), allocated, nil
+
+}
+
+func generateRandBytes(byteSlice []byte) (err error) {
+	_, readErr := rand.Read(byteSlice)
+	if readErr != nil {
+		return readErr
+	}
+	//function will write random bytes to the slice that is passed in, no need to return slice because slice is passed by reference
+	return nil
 }

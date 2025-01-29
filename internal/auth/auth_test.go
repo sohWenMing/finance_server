@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"testing"
@@ -167,6 +168,25 @@ func TestValidateAndReturnJWTToken(t *testing.T) {
 			testhelpers.AssertHasError(t, err)
 		}
 	}
+}
+
+func TestGenerateRefreshToken(t *testing.T) {
+	refreshToken, writtenByteSlice, err := GenerateRefreshToken()
+	testhelpers.AssertNoError(t, err)
+	decodedBytes, err := hex.DecodeString(refreshToken)
+	testhelpers.AssertNoError(t, err)
+	testhelpers.AssertIntVals(t, len(writtenByteSlice), len(decodedBytes))
+	if len(writtenByteSlice) != len(decodedBytes) {
+		return
+	}
+	for i := 0; i < len(writtenByteSlice); i++ {
+		if writtenByteSlice[i] != decodedBytes[i] {
+			t.Error("bytes decoded and written differ")
+			return
+		}
+	}
+	testhelpers.AssertIntVals(t, len(refreshToken), 32)
+	fmt.Printf("refreshToken generated: %s\n", refreshToken)
 }
 
 func generateTestToken(t *testing.T, validity time.Duration) (string, bool) {

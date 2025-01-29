@@ -1,46 +1,15 @@
 package integrationtesting
 
 import (
-	"context"
 	"fmt"
-	"log"
-	"net/http"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	alphavantage "github.com/sohWenMing/finance_server/api_connections/alpha_vantage"
-	"github.com/sohWenMing/finance_server/config"
-	envvars "github.com/sohWenMing/finance_server/env_vars"
-	database "github.com/sohWenMing/finance_server/internal/database/connection"
 	"github.com/sohWenMing/finance_server/internal/database/sqlc_generated"
 	testhelpers "github.com/sohWenMing/finance_server/test_helpers"
 )
-
-var testConfig = config.Config{}
-var client = http.Client{
-	Timeout: 30 * time.Second,
-}
-var testContext = context.Background()
-var apiKey string
-
-func TestMain(m *testing.M) {
-	envvars.LoadEnv("../.env")
-	apiKey = os.Getenv("ALPHA_VANTAGE_API_KEY")
-	fmt.Printf("apiKey: %s\n", apiKey)
-
-	db, err := database.ConnectToDB("../.env")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	defer db.Close()
-	testConfig.RegisterQueries(db)
-	code := m.Run()
-	os.Exit(code)
-
-}
 
 func TestAlphaVantageDBIntegrationDemo(t *testing.T) {
 	relevantMetrics, err := alphavantage.GetBalanceSheetInformation("IBM", client, testContext, "demo")
@@ -48,20 +17,20 @@ func TestAlphaVantageDBIntegrationDemo(t *testing.T) {
 	testhelpers.AssertNoError(t, err)
 	for _, metric := range relevantMetrics {
 		param := mapRelevantMetricParam(metric)
-		_, err := testConfig.Queries.CreateBalanceSheetRecord(testContext, param)
+		_, err := TestConfig.Queries.CreateBalanceSheetRecord(testContext, param)
 		testhelpers.AssertNoError(t, err)
 		if err == nil {
 			numRecords += 1
 		}
 
 	}
-	retrievedRecords, err := testConfig.Queries.GetBalanceSheetRecordsByTicker(testContext, "IBM")
+	retrievedRecords, err := TestConfig.Queries.GetBalanceSheetRecordsByTicker(testContext, "IBM")
 	testhelpers.AssertNoError(t, err)
 	testhelpers.AssertIntVals(t, len(retrievedRecords), numRecords)
 	fmt.Printf("Number of records inserted into database: %d\n", numRecords)
-	deleteErr := testConfig.Queries.DeleteBalanceSheetRecordsByTicker(testContext, "IBM")
+	deleteErr := TestConfig.Queries.DeleteBalanceSheetRecordsByTicker(testContext, "IBM")
 	testhelpers.AssertNoError(t, deleteErr)
-	existingRecords, err := testConfig.Queries.GetBalanceSheetRecordsByTicker(testContext, "IBM")
+	existingRecords, err := TestConfig.Queries.GetBalanceSheetRecordsByTicker(testContext, "IBM")
 	testhelpers.AssertNoError(t, err)
 	testhelpers.AssertIntVals(t, len(existingRecords), 0)
 }
@@ -100,7 +69,7 @@ func TestAlphaVantageDBIntegrationDemo(t *testing.T) {
 // 		testhelpers.AssertIntVals(t, len(retrievedRecords), numRecords)
 // 		time.Sleep(10 * time.Second)
 // 	}
-// }
+//}
 
 func mapRelevantMetricParam(metric alphavantage.QuarterlyMetric) (param sqlc_generated.CreateBalanceSheetRecordParams) {
 	mappedParam := sqlc_generated.CreateBalanceSheetRecordParams{

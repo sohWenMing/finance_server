@@ -3,6 +3,8 @@ package config
 import (
 	"database/sql"
 	"os"
+	"sync"
+	"time"
 
 	envvars "github.com/sohWenMing/finance_server/env_vars"
 	"github.com/sohWenMing/finance_server/internal/database/sqlc_generated"
@@ -16,8 +18,14 @@ import (
 */
 
 type Config struct {
-	Queries   *sqlc_generated.Queries
-	JwtSecret []byte
+	Queries          *sqlc_generated.Queries
+	JwtSecret        []byte
+	jwtValidDuration *jwtValidDuration
+}
+
+type jwtValidDuration struct {
+	duration time.Duration
+	mu       sync.Mutex
 }
 
 func (c *Config) RegisterJwtSecret(envPath string) error {
@@ -33,4 +41,17 @@ func (c *Config) RegisterJwtSecret(envPath string) error {
 func (c *Config) RegisterQueries(db *sql.DB) {
 	// at this point, the database should already be loaded, so we should be passing the db type into this function
 	c.Queries = sqlc_generated.New(db)
+}
+
+func (c *Config) GetJWTValidDuration() time.Duration {
+	c.jwtValidDuration.mu.Lock()
+	defer c.jwtValidDuration.mu.Unlock()
+	return c.jwtValidDuration.duration
+}
+func (c *Config) SetJWTValidDuration(newDuration time.Duration) (returnedDuration time.Duration) {
+	c.jwtValidDuration.mu.Lock()
+	defer c.jwtValidDuration.mu.Unlock()
+	c.jwtValidDuration.duration = newDuration
+
+	return c.jwtValidDuration.duration
 }

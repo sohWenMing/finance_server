@@ -40,7 +40,7 @@ func CreateUserHandler(queries *sqlc_generated.Queries) http.HandlerFunc {
 
 		hashedPassword, err := auth.GenerateHashedPassword(bodyJson.Password)
 		if err != nil {
-			writerInteralError(w)
+			writeInternalError(w)
 			return
 		}
 
@@ -80,7 +80,7 @@ func CreateUserHandler(queries *sqlc_generated.Queries) http.HandlerFunc {
 					w.Write([]byte(fmt.Sprintf("email %s is already being used", params.Email)))
 					return
 				case false:
-					writerInteralError(w)
+					writeInternalError(w)
 					return
 					//if the error returned is not due to a unique constraint, then it is due to internal error, return 500
 				}
@@ -97,7 +97,7 @@ func CreateUserHandler(queries *sqlc_generated.Queries) http.HandlerFunc {
 
 		bodyString, err := json.Marshal(createdUserResJson)
 		if err != nil {
-			writerInteralError(w)
+			writeInternalError(w)
 			return
 		}
 
@@ -109,7 +109,7 @@ func CreateUserHandler(queries *sqlc_generated.Queries) http.HandlerFunc {
 
 }
 
-func LoginUserHandler(queries *sqlc_generated.Queries, secret []byte) http.HandlerFunc {
+func LoginUserHandler(duration time.Duration, queries *sqlc_generated.Queries, secret []byte) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 
 		bodyJson, shouldReturn := processUserBodyToJSON(r, w)
@@ -118,7 +118,7 @@ func LoginUserHandler(queries *sqlc_generated.Queries, secret []byte) http.Handl
 		}
 		user, dbErr := queries.GetUserByEmail(context.Background(), bodyJson.Email)
 		if dbErr != nil {
-			writerInteralError(w)
+			writeInternalError(w)
 			return
 		}
 		compareHashErr := auth.CheckHashedPassword(bodyJson.Password, user.HashedPassword)
@@ -127,19 +127,25 @@ func LoginUserHandler(queries *sqlc_generated.Queries, secret []byte) http.Handl
 			return
 		}
 
-		tokenString, err := auth.GenerateJWTToken(user.ID.String(), false, 20*time.Minute, secret)
+		tokenString, err := auth.GenerateJWTToken(user.ID.String(), false, duration, secret)
 		if err != nil {
-			writerInteralError(w)
+			writeInternalError(w)
 			return
 		}
 
+		refreshToken, _, err := auth.GenerateRefreshToken()
+		if err != nil {
+			writeInternalError(w)
+		}
+
 		responseJson := usermapping.LoginResponse{
-			IsSuccess:   true,
-			AccessToken: tokenString,
+			IsSuccess:    true,
+			AccessToken:  tokenString,
+			RefreshToken: refreshToken,
 		}
 		resBytes, marshalErr := json.Marshal(responseJson)
 		if marshalErr != nil {
-			writerInteralError(w)
+			writeInternalError(w)
 		}
 		w.WriteHeader(200)
 		w.Header().Set("content-type", "application/json")
@@ -180,7 +186,7 @@ func processUserBodyToJSON(r *http.Request, w http.ResponseWriter) (usermapping.
 	return bodyJson, false
 }
 
-func writerInteralError(w http.ResponseWriter) {
+func writeInternalError(w http.ResponseWriter) {
 
 	w.WriteHeader(500)
 	w.Header().Set("content-type", "text/plain")

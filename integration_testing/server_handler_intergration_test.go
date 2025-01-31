@@ -1,4 +1,4 @@
-package server
+package integrationtesting
 
 import (
 	"bytes"
@@ -6,62 +6,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
-	"os"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
-	"github.com/sohWenMing/finance_server/config"
 	"github.com/sohWenMing/finance_server/internal/auth"
-	database "github.com/sohWenMing/finance_server/internal/database/connection"
 	usermapping "github.com/sohWenMing/finance_server/mapping/user_mapping"
 	testhelpers "github.com/sohWenMing/finance_server/test_helpers"
 )
-
-var (
-	portChan     chan int
-	doneChan     chan struct{}
-	exitChan     chan struct{}
-	client       *http.Client
-	receivedPort int
-	basePath     string
-)
-
-var testConfig = config.Config{}
-
-func TestMain(m *testing.M) {
-
-	db, err := database.ConnectToDB("../.env")
-	if err != nil {
-		log.Fatal(err)
-	}
-	// defer db.Close()
-	portChan = make(chan int)
-	doneChan = make(chan struct{})
-	exitChan = make(chan struct{})
-	client = &http.Client{
-		Timeout: 5 * time.Second,
-	}
-
-	testConfig.RegisterQueries(db)
-	testConfig.RegisterJwtSecret("./.env")
-
-	go func(portChan chan int, doneChan chan struct{}) {
-		InitServer(true, portChan, doneChan, exitChan, http.Dir(".."), testConfig)
-	}(portChan, doneChan)
-	//Init on server has to be done on separate goroutine, so as to not block
-
-	receivedPort = <-portChan
-	basePath = fmt.Sprintf("http://localhost:%d", receivedPort)
-	//block execution until receivedPort is received from the portChan
-	code := m.Run()
-	doneChan <- struct{}{}
-	//send done signal to server to close server, when all tests are done
-	os.Exit(code)
-}
 
 func TestPing(t *testing.T) {
 
@@ -107,10 +60,10 @@ func TestCreateUserHandler(t *testing.T) {
 	if err != nil {
 		return
 	}
-	defer testConfig.Queries.DeleteUserById(context.Background(), userIdUUID)
+	defer TestConfig.Queries.DeleteUserById(context.Background(), userIdUUID)
 	// at this point if there is no error and the test function has not returned, user has already been created. defer the deleting of this user
 
-	retrievedUser, err := testConfig.Queries.GetUserById(context.Background(), userIdUUID)
+	retrievedUser, err := TestConfig.Queries.GetUserById(context.Background(), userIdUUID)
 	testhelpers.AssertNoError(t, err)
 	if err != nil {
 		return
@@ -177,12 +130,16 @@ func runLoginTest(t *testing.T, createUserPath string, isExpectPass bool) {
 		return
 	}
 
+	//first create the user in the DB
+
 	userIdUUID, err := uuid.Parse(responseJson.UserId)
 	testhelpers.AssertNoError(t, err)
 	if err != nil {
 		return
 	}
-	defer testConfig.Queries.DeleteUserById(context.Background(), userIdUUID)
+	defer TestConfig.Queries.DeleteUserById(context.Background(), userIdUUID)
+	//at this point, the user is already created, so defer deletion so that it will occur even if the function hits exception or error and returns early
+
 	loginUserPath := fmt.Sprintf("%s/loginUser", basePath)
 	if !isExpectPass {
 		createUserReqBody.Password = createUserReqBody.Password + "add fail"
@@ -217,13 +174,17 @@ func runLoginTest(t *testing.T, createUserPath string, isExpectPass bool) {
 
 		testhelpers.AssertBool(t, loginResponseJson.IsSuccess, true)
 
-		token, err := auth.ValidateAndReturnClaims(testConfig.JwtSecret, loginResponseJson.AccessToken)
+		token, err := auth.ValidateAndReturnClaims(TestConfig.JwtSecret, loginResponseJson.AccessToken)
 		testhelpers.AssertNoError(t, err)
 		if err != nil {
 			return
 		}
 		testhelpers.AssertStringVals(t, responseJson.UserId, token.UserId)
 		testhelpers.AssertBool(t, token.IsAdmin, false)
+		if len(loginResponseJson.RefreshToken) == 0 {
+			t.Errorf("refresh token returned was null\n")
+
+		}
 		return
 	case false:
 		testhelpers.AssertIntVals(t, res.StatusCode, 401)

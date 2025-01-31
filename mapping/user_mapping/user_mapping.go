@@ -11,6 +11,7 @@ type CreatedUserResponse struct {
 }
 
 type LoginResponse struct {
-	IsSuccess   bool   `json:"is_success"`
-	AccessToken string `json:"token"`
+	IsSuccess    bool   `json:"is_success"`
+	AccessToken  string `json:"token"`
+	RefreshToken string `json:"refresh_token"`
 }

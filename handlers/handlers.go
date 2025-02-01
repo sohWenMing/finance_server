@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -16,19 +17,6 @@ import (
 	errorutils "github.com/sohWenMing/finance_server/error_utils"
 	usermapping "github.com/sohWenMing/finance_server/mapping/user_mapping"
 )
-
-func MiddleWareGenerator(next http.Handler) http.Handler {
-	/*
-		http.HandlerFunc takes in a function with a signature of func(http.ResponseWriter http.Request) which
-		has a ServeHTTP method, satisfying the http.Handler type. Allows for passing of other handlers into the
-		function, which allows the function to act as a middleware layer
-	*/
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
-		next.ServeHTTP(w, r)
-	})
-
-}
 
 func CreateUserHandler(queries *sqlc_generated.Queries) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -109,7 +97,7 @@ func CreateUserHandler(queries *sqlc_generated.Queries) http.HandlerFunc {
 
 }
 
-func LoginUserHandler(duration time.Duration, queries *sqlc_generated.Queries, secret []byte) http.HandlerFunc {
+func LoginUserHandler(getDuration func() time.Duration, queries *sqlc_generated.Queries, secret []byte) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 
 		bodyJson, shouldReturn := processUserBodyToJSON(r, w)
@@ -127,7 +115,7 @@ func LoginUserHandler(duration time.Duration, queries *sqlc_generated.Queries, s
 			return
 		}
 
-		tokenString, err := auth.GenerateJWTToken(user.ID.String(), false, duration, secret)
+		tokenString, err := auth.GenerateJWTToken(user.ID.String(), user.IsAdmin, getDuration(), secret)
 		if err != nil {
 			writeInternalError(w)
 			return
@@ -160,8 +148,35 @@ func PingHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("content-type", "text/plain")
 	w.Write([]byte("OK"))
 }
+
 func FileServerMiddleWare(fileServerHandler http.Handler) http.Handler {
 	return fsMiddleWareGenerator(fileServerHandler)
+}
+
+func CheckAccessMiddleware(next func(w http.ResponseWriter, r *http.Request), secret []byte, isAdminRequired bool) http.Handler {
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		claims, err := checkJWTTokenValidAndReturnClaims(r, secret)
+		if err != nil {
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Header().Set("content-type", "text/plain")
+			w.Write([]byte(err.Error()))
+			return
+		}
+
+		if isAdminRequired {
+			if !claims.IsAdmin {
+
+				w.WriteHeader(http.StatusUnauthorized)
+				w.Header().Set("content-type", "text/plain")
+				w.Write([]byte("user does not have access"))
+				return
+			}
+		}
+
+		next(w, r)
+	})
+
 }
 
 func fsMiddleWareGenerator(next http.Handler) http.Handler {
@@ -197,4 +212,24 @@ func writeUnauthorizedError(w http.ResponseWriter, response string) {
 	w.WriteHeader(http.StatusUnauthorized)
 	w.Header().Set("content-type", "text/plain")
 	w.Write([]byte(response))
+}
+func checkJWTTokenValidAndReturnClaims(r *http.Request, secret []byte) (claims auth.ReturnedClaims, err error) {
+	tokenString, err := getJWTBearerToken(r)
+	if err != nil {
+		return claims, err
+	}
+	returnedClaims, err := auth.ValidateAndReturnClaims(secret, tokenString)
+	if err != nil {
+		return claims, err
+	}
+	return returnedClaims, nil
+
+}
+func getJWTBearerToken(r *http.Request) (tokenString string, err error) {
+	authHeader := r.Header.Get("Authorization")
+	bearerString := strings.TrimPrefix(authHeader, "Bearer: ")
+	if bearerString == "" {
+		return tokenString, errors.New("token not found in Authorization header in request")
+	}
+	return bearerString, nil
 }

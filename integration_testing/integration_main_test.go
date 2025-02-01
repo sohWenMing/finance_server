@@ -16,14 +16,20 @@ import (
 )
 
 var (
-	portChan     chan int
-	doneChan     chan struct{}
-	exitChan     chan struct{}
-	receivedPort int
-	basePath     string
+	portChan          chan int
+	doneChan          chan struct{}
+	exitChan          chan struct{}
+	receivedPort      int
+	basePath          string
+	createUserPath    string
+	loginUserPath     string
+	testJWtAccessPath string
 )
 
-var TestConfig = config.Config{}
+var TestConfig = config.InitConfig()
+
+//don't set the duration for JWT validity here, set it within the tests so that can check positive and negative cases
+
 var client = http.Client{
 	Timeout: 30 * time.Second,
 }
@@ -33,7 +39,6 @@ var apiKey string
 func TestMain(m *testing.M) {
 	envvars.LoadEnv("../.env")
 	apiKey = os.Getenv("ALPHA_VANTAGE_API_KEY")
-	fmt.Printf("apiKey: %s\n", apiKey)
 
 	portChan = make(chan int)
 	doneChan = make(chan struct{})
@@ -56,6 +61,9 @@ func TestMain(m *testing.M) {
 
 	receivedPort = <-portChan
 	basePath = fmt.Sprintf("http://localhost:%d", receivedPort)
+	createUserPath = fmt.Sprintf("%s/createUser", basePath)
+	loginUserPath = fmt.Sprintf("%s/loginUser", basePath)
+	testJWtAccessPath = fmt.Sprintf("%s/testJWTAccess", basePath)
 	code := m.Run()
 	os.Exit(code)
 

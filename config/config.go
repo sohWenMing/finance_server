@@ -43,6 +43,7 @@ func (c *Config) RegisterQueries(db *sql.DB) {
 	c.Queries = sqlc_generated.New(db)
 }
 
+// functions below are to make the validity of the JWT token configurable, the token validity will be evaluated at each call of the handler
 func (c *Config) GetJWTValidDuration() time.Duration {
 	c.jwtValidDuration.mu.Lock()
 	defer c.jwtValidDuration.mu.Unlock()
@@ -54,4 +55,10 @@ func (c *Config) SetJWTValidDuration(newDuration time.Duration) (returnedDuratio
 	c.jwtValidDuration.duration = newDuration
 
 	return c.jwtValidDuration.duration
+}
+
+func InitConfig() Config {
+	return Config{
+		jwtValidDuration: new(jwtValidDuration),
+	}
 }

@@ -1,7 +1,6 @@
 package integrationtesting
 
 import (
-	"fmt"
 	"testing"
 	"time"
 
@@ -27,7 +26,6 @@ func TestAlphaVantageDBIntegrationDemo(t *testing.T) {
 	retrievedRecords, err := TestConfig.Queries.GetBalanceSheetRecordsByTicker(testContext, "IBM")
 	testhelpers.AssertNoError(t, err)
 	testhelpers.AssertIntVals(t, len(retrievedRecords), numRecords)
-	fmt.Printf("Number of records inserted into database: %d\n", numRecords)
 	deleteErr := TestConfig.Queries.DeleteBalanceSheetRecordsByTicker(testContext, "IBM")
 	testhelpers.AssertNoError(t, deleteErr)
 	existingRecords, err := TestConfig.Queries.GetBalanceSheetRecordsByTicker(testContext, "IBM")

@@ -13,3 +13,8 @@ SELECT refresh_tokens.id, refresh_tokens.user_id, refresh_tokens.token, refresh_
 DELETE FROM refresh_tokens
 WHERE refresh_tokens.id = $1;
 
+-- name: UpdateRefreshToken :one
+UPDATE refresh_tokens
+SET expires_on = $1
+WHERE id = $2
+RETURNING refresh_tokens.id, refresh_tokens.user_id, refresh_tokens.token, refresh_tokens.expires_on;

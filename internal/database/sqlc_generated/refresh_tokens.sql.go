@@ -82,3 +82,34 @@ func (q *Queries) GetRefreshTokenInfoByToken(ctx context.Context, token string) 
 	)
 	return i, err
 }
+
+const updateRefreshToken = `-- name: UpdateRefreshToken :one
+UPDATE refresh_tokens
+SET expires_on = $1
+WHERE id = $2
+RETURNING refresh_tokens.id, refresh_tokens.user_id, refresh_tokens.token, refresh_tokens.expires_on
+`
+
+type UpdateRefreshTokenParams struct {
+	ExpiresOn time.Time
+	ID        uuid.UUID
+}
+
+type UpdateRefreshTokenRow struct {
+	ID        uuid.UUID
+	UserID    uuid.UUID
+	Token     string
+	ExpiresOn time.Time
+}
+
+func (q *Queries) UpdateRefreshToken(ctx context.Context, arg UpdateRefreshTokenParams) (UpdateRefreshTokenRow, error) {
+	row := q.db.QueryRowContext(ctx, updateRefreshToken, arg.ExpiresOn, arg.ID)
+	var i UpdateRefreshTokenRow
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Token,
+		&i.ExpiresOn,
+	)
+	return i, err
+}

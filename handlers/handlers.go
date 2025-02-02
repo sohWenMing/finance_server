@@ -10,13 +10,11 @@ import (
 
 	"encoding/json"
 
-	"github.com/google/uuid"
 	"github.com/sohWenMing/finance_server/internal/auth"
 	dbwritefunctions "github.com/sohWenMing/finance_server/internal/database/db_write_functions"
 	"github.com/sohWenMing/finance_server/internal/database/sqlc_generated"
 	tokenmapping "github.com/sohWenMing/finance_server/mapping"
 
-	errorutils "github.com/sohWenMing/finance_server/error_utils"
 	usermapping "github.com/sohWenMing/finance_server/mapping/user_mapping"
 )
 
@@ -35,51 +33,20 @@ func CreateUserHandler(queries *sqlc_generated.Queries) http.HandlerFunc {
 		}
 
 		// if hashing fails, then write 500 and return
-
-		params := sqlc_generated.CreateUserParams{
-			ID:             uuid.New(),
-			IsAdmin:        false,
-			Email:          bodyJson.Email,
-			HashedPassword: hashedPassword,
-			CreatedAt:      time.Now(),
-			UpdatedAt:      time.Now(),
-		}
-
-		var user sqlc_generated.User
-
-		/*
-			in a loop, check to see if the attempted creation of the user returns any errors
-			in the event that an error is returned, then we need to check if the error is a unique constaint violation
-			if it is a unique violation there are two possible cases:
-				1 - the uuid has been duplicated. while this is rare, it should still be a case that is handled by creating a new uuid
-				2 - the email has been duplicated. in which case, we should just be returning the error and alerting the user
-		*/
-		for {
-			createdUser, checkErr := queries.CreateUser(context.Background(), params)
-			if checkErr != nil {
-				isUniqueViolation, pqErr, _ := errorutils.CheckIsUniqueConstraintPqError(checkErr)
-				//first check to see if the violation is due to a violation of a unique constraint
-				switch isUniqueViolation {
-				case true:
-					if strings.Contains(pqErr.Message, "unique_user_id") {
-						params.ID = uuid.New()
-						continue
-					}
-					w.WriteHeader(http.StatusConflict)
-					w.Header().Set("content-type", "text/plain")
-					w.Write([]byte(fmt.Sprintf("email %s is already being used", params.Email)))
-					return
-				case false:
-					writeInternalError(w)
-					return
-					//if the error returned is not due to a unique constraint, then it is due to internal error, return 500
-				}
+		user, err, isDupEmail := dbwritefunctions.CreateUser(queries, bodyJson.Email, hashedPassword)
+		if err != nil {
+			switch isDupEmail {
+			case true:
+				w.WriteHeader(http.StatusBadRequest)
+				w.Header().Set("content-type", "text/plain")
+				w.Write([]byte(fmt.Sprintf("email %s is already being used", bodyJson.Email)))
+				return
+			case false:
+				writeInternalError(w)
+				return
 			}
-			user = createdUser
-			break
-
 		}
-		// if there is a problem with craating the user in the database, then 500 and early return
+
 		createdUserResJson := usermapping.CreatedUserResponse{
 			IsSuccess: true,
 			UserId:    user.ID.String(),

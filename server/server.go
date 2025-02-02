@@ -6,7 +6,6 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"time"
 
 	"github.com/sohWenMing/finance_server/config"
 	"github.com/sohWenMing/finance_server/handlers"
@@ -21,9 +20,12 @@ func InitServer(isTest bool, portChan chan<- int, doneChan <-chan struct{}, exit
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /ping", handlers.PingHandler)
+	mux.Handle("GET /testJWTAccess", handlers.CheckAccessMiddleware(handlers.PingHandler, config.JwtSecret, false))
+
 	mux.Handle("GET /app/", http.StripPrefix("/app", handlers.FileServerMiddleWare(http.FileServer(root))))
 	mux.HandleFunc("POST /createUser", handlers.CreateUserHandler(config.Queries))
-	mux.HandleFunc("POST /loginUser", handlers.LoginUserHandler(10*time.Minute, config.Queries, config.JwtSecret))
+	mux.HandleFunc("POST /loginUser", handlers.LoginUserHandler(config.GetJWTValidDuration, config.Queries, config.JwtSecret))
+	mux.HandleFunc("POST /refreshToken", handlers.CheckRefreshTokenAndGetNewJWTHandler(config.GetJWTValidDuration, config.Queries, config.JwtSecret))
 	server := &http.Server{
 		Handler: mux,
 	}

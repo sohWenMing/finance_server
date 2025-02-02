@@ -9,9 +9,12 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/sohWenMing/finance_server/internal/auth"
+	"github.com/sohWenMing/finance_server/internal/database/sqlc_generated"
+	tokenmapping "github.com/sohWenMing/finance_server/mapping"
 	usermapping "github.com/sohWenMing/finance_server/mapping/user_mapping"
 	testhelpers "github.com/sohWenMing/finance_server/test_helpers"
 )
@@ -48,8 +51,7 @@ func TestFileServer(t *testing.T) {
 }
 
 func TestCreateUserHandler(t *testing.T) {
-
-	createUserPath := fmt.Sprintf("%s/createUser", basePath)
+	TestConfig.SetJWTValidDuration(10 * time.Minute)
 	createUserReqBody, responseJson, shouldReturn := createAndRetrieveUser(t, createUserPath)
 	if shouldReturn {
 		return
@@ -102,7 +104,7 @@ func TestCreateUserHandler(t *testing.T) {
 }
 
 func TestLoginUserHandler(t *testing.T) {
-	createUserPath := fmt.Sprintf("%s/createUser", basePath)
+	TestConfig.SetJWTValidDuration(10 * time.Minute)
 
 	type testStruct struct {
 		name         string
@@ -124,6 +126,168 @@ func TestLoginUserHandler(t *testing.T) {
 	}
 }
 
+func TestJWTValidation(t *testing.T) {
+	type testStruct struct {
+		name        string
+		jwtValidity time.Duration
+		isExpectErr bool
+	}
+
+	tests := []testStruct{
+		{
+			"test jwt is valid, should pass",
+			10 * time.Minute,
+			false,
+		},
+		{
+			"test jwt is valid, should fail",
+			0 * time.Minute,
+			true,
+		},
+	}
+	createUserReqBody, responseJson, shouldReturn := createAndRetrieveUser(t, createUserPath)
+	if shouldReturn {
+		return
+	}
+	userIdUUID, err := uuid.Parse(responseJson.UserId)
+	testhelpers.AssertNoError(t, err)
+	if err != nil {
+		return
+	}
+	defer TestConfig.Queries.DeleteUserById(context.Background(), userIdUUID)
+	for _, test := range tests {
+		TestConfig.SetJWTValidDuration(test.jwtValidity)
+
+		//set the validity of the token according to the test before running the test
+		t.Run(test.name, func(t *testing.T) {
+			res, shouldReturn := runLoginAndGetResponse(t, createUserReqBody)
+			if shouldReturn {
+				return
+			}
+			var loginResponse usermapping.LoginResponse
+			decoder := json.NewDecoder(res.Body)
+			jsonDecodeErr := decoder.Decode(&loginResponse)
+			testhelpers.AssertNoError(t, jsonDecodeErr)
+			if jsonDecodeErr != nil {
+				return
+			}
+			req, err := http.NewRequest(http.MethodGet, testJWtAccessPath, nil)
+			req.Header.Set("Authorization", fmt.Sprintf("Bearer: %s", loginResponse.AccessToken))
+			testhelpers.AssertNoError(t, err)
+			if err != nil {
+				return
+			}
+			testJWTAccessRes, err := client.Do(req)
+			testhelpers.AssertNoError(t, err)
+			if err != nil {
+				return
+			}
+			testhelpers.AssertNoError(t, err)
+			switch test.isExpectErr {
+			case false:
+				testhelpers.AssertIntVals(t, testJWTAccessRes.StatusCode, 200)
+			case true:
+				testhelpers.AssertIntVals(t, testJWTAccessRes.StatusCode, 401)
+			}
+		})
+	}
+}
+
+func TestRefreshTokenGeneration(t *testing.T) {
+
+	createUserReqBody, responseJson, shouldReturn := createAndRetrieveUser(t, createUserPath)
+	if shouldReturn {
+		return
+	}
+
+	userIdUUID, err := uuid.Parse(responseJson.UserId)
+	testhelpers.AssertNoError(t, err)
+	if err != nil {
+		return
+	}
+	defer TestConfig.Queries.DeleteUserById(testContext, userIdUUID)
+	runTestRefreshGeneration(t, createUserReqBody, responseJson, false)
+
+	runTestRefreshGeneration(t, createUserReqBody, responseJson, true)
+
+}
+
+func runTestRefreshGeneration(t *testing.T, createUserReqBody usermapping.UserJSON, responseJson usermapping.CreatedUserResponse, isResetRefresh bool) {
+	res, shouldReturn := runLoginAndGetResponse(t, createUserReqBody)
+	if shouldReturn {
+		return
+	}
+	var loginResponse usermapping.LoginResponse
+	decoder := json.NewDecoder(res.Body)
+	jsonDecodeErr := decoder.Decode(&loginResponse)
+	testhelpers.AssertNoError(t, jsonDecodeErr)
+	if jsonDecodeErr != nil {
+		fmt.Println("error occured at line 216")
+		return
+	}
+
+	refreshTokenCreatedAtLogin, err := TestConfig.Queries.GetRefreshTokenInfoByToken(testContext, loginResponse.RefreshToken)
+
+	updateParams := sqlc_generated.UpdateRefreshTokenParams{
+		ID:        refreshTokenCreatedAtLogin.ID,
+		ExpiresOn: time.Now().Add(-24 * time.Hour),
+	}
+	if isResetRefresh {
+		TestConfig.Queries.UpdateRefreshToken(testContext, updateParams)
+	}
+	defer TestConfig.Queries.DeleteRefreshTokenById(testContext, refreshTokenCreatedAtLogin.ID)
+	testhelpers.AssertNoError(t, err)
+	if err != nil {
+		return
+	}
+	refreshRequest := tokenmapping.RefreshTokenJSON{
+		RefreshToken: loginResponse.RefreshToken,
+	}
+	reqBody, err := json.Marshal(refreshRequest)
+	testhelpers.AssertNoError(t, err)
+	if err != nil {
+		return
+	}
+	req, err := http.NewRequest(http.MethodPost, testRefreshTokenPath, bytes.NewReader(reqBody))
+	testhelpers.AssertNoError(t, err)
+	if err != nil {
+		return
+	}
+	refreshResponse, refreshErr := client.Do(req)
+	testhelpers.AssertNoError(t, refreshErr)
+	if refreshErr != nil {
+		return
+	}
+	// bodyBytes, err := io.ReadAll(bufio.NewReader(refreshResponse.Body))
+	// if err != nil {
+	// 	fmt.Println("error reading")
+	// }
+	// fmt.Printf("bodybytes:  %s", string(bodyBytes))
+	switch isResetRefresh {
+	case false:
+		var refreshResponseJSON usermapping.LoginResponse
+		refreshDecoder := json.NewDecoder(refreshResponse.Body)
+		jsonDecodeErr = refreshDecoder.Decode(&refreshResponseJSON)
+		testhelpers.AssertNoError(t, jsonDecodeErr)
+		if jsonDecodeErr != nil {
+			fmt.Println("error occured at line 250")
+			return
+		}
+		retrievedRefreshToken, err := TestConfig.Queries.GetRefreshTokenInfoByToken(testContext, refreshResponseJSON.RefreshToken)
+		if err != nil {
+			return
+		}
+		defer TestConfig.Queries.DeleteRefreshTokenById(testContext, retrievedRefreshToken.ID)
+		testhelpers.AssertStringVals(t, responseJson.UserId, retrievedRefreshToken.UserID.String())
+		if retrievedRefreshToken.Token == loginResponse.RefreshToken {
+			t.Errorf("token should be different from the one that was created at login")
+		}
+		return
+	case true:
+		testhelpers.AssertIntVals(t, refreshResponse.StatusCode, http.StatusUnauthorized)
+	}
+}
+
 func runLoginTest(t *testing.T, createUserPath string, isExpectPass bool) {
 	createUserReqBody, responseJson, shouldReturn := createAndRetrieveUser(t, createUserPath)
 	if shouldReturn {
@@ -140,23 +304,11 @@ func runLoginTest(t *testing.T, createUserPath string, isExpectPass bool) {
 	defer TestConfig.Queries.DeleteUserById(context.Background(), userIdUUID)
 	//at this point, the user is already created, so defer deletion so that it will occur even if the function hits exception or error and returns early
 
-	loginUserPath := fmt.Sprintf("%s/loginUser", basePath)
 	if !isExpectPass {
 		createUserReqBody.Password = createUserReqBody.Password + "add fail"
 	}
-	bodyString, err := json.Marshal(createUserReqBody)
-	testhelpers.AssertNoError(t, err)
-	if err != nil {
-		return
-	}
-	req, err := http.NewRequest(http.MethodPost, loginUserPath, bytes.NewReader(bodyString))
-	testhelpers.AssertNoError(t, err)
-	if err != nil {
-		return
-	}
-	res, err := client.Do(req)
-	testhelpers.AssertNoError(t, err)
-	if err != nil {
+	res, shouldReturn := runLoginAndGetResponse(t, createUserReqBody)
+	if shouldReturn {
 		return
 	}
 
@@ -177,6 +329,7 @@ func runLoginTest(t *testing.T, createUserPath string, isExpectPass bool) {
 		token, err := auth.ValidateAndReturnClaims(TestConfig.JwtSecret, loginResponseJson.AccessToken)
 		testhelpers.AssertNoError(t, err)
 		if err != nil {
+			fmt.Println("test failed at line 181")
 			return
 		}
 		testhelpers.AssertStringVals(t, responseJson.UserId, token.UserId)
@@ -191,7 +344,30 @@ func runLoginTest(t *testing.T, createUserPath string, isExpectPass bool) {
 	}
 }
 
+func runLoginAndGetResponse(t *testing.T, createUserReqBody usermapping.UserJSON) (*http.Response, bool) {
+	bodyString, err := json.Marshal(createUserReqBody)
+	testhelpers.AssertNoError(t, err)
+	if err != nil {
+		fmt.Printf("error occured at line 233, %s\n", err.Error())
+		return nil, true
+	}
+	req, err := http.NewRequest(http.MethodPost, loginUserPath, bytes.NewReader(bodyString))
+	testhelpers.AssertNoError(t, err)
+	if err != nil {
+		fmt.Printf("error occured at line 239, %s\n", err.Error())
+		return nil, true
+	}
+	res, err := client.Do(req)
+	testhelpers.AssertNoError(t, err)
+	if err != nil {
+		fmt.Printf("error occured at line 245, %s\n", err.Error())
+		return nil, true
+	}
+	return res, false
+}
+
 func createAndRetrieveUser(t *testing.T, path string) (usermapping.UserJSON, usermapping.CreatedUserResponse, bool) {
+
 	createUserReqBody := usermapping.UserJSON{
 		Email:    "wenming.soh@gmail.com",
 		Password: "password",
@@ -199,15 +375,21 @@ func createAndRetrieveUser(t *testing.T, path string) (usermapping.UserJSON, use
 
 	bodyString, err := json.Marshal(createUserReqBody)
 	testhelpers.AssertNoError(t, err)
+	if err != nil {
+		fmt.Printf("error occured at line 260, %s\n", err.Error())
+		return usermapping.UserJSON{}, usermapping.CreatedUserResponse{}, true
+	}
 
 	req, reqErr := http.NewRequest(http.MethodPost, path, bytes.NewReader(bodyString))
 	testhelpers.AssertNoError(t, reqErr)
 	if reqErr != nil {
+		fmt.Printf("error occured at line 266, %s\n", reqErr.Error())
 		return usermapping.UserJSON{}, usermapping.CreatedUserResponse{}, true
 	}
 	res, resErr := client.Do(req)
 	testhelpers.AssertNoError(t, resErr)
 	if resErr != nil {
+		fmt.Printf("error occured at line 273, %s\n", resErr.Error())
 		return usermapping.UserJSON{}, usermapping.CreatedUserResponse{}, true
 	}
 	var responseJson usermapping.CreatedUserResponse
@@ -217,6 +399,7 @@ func createAndRetrieveUser(t *testing.T, path string) (usermapping.UserJSON, use
 
 	testhelpers.AssertNoError(t, jsonDecodeErr)
 	if jsonDecodeErr != nil {
+		fmt.Printf("error occured at line 283, %s\n", jsonDecodeErr.Error())
 		return usermapping.UserJSON{}, usermapping.CreatedUserResponse{}, true
 	}
 	testhelpers.AssertBool(t, responseJson.IsSuccess, true)

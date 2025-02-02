@@ -42,6 +42,7 @@ type ReturnedClaims struct {
 }
 
 func GenerateJWTToken(userId string, isAdmin bool, validity time.Duration, signingKey []byte) (signedString string, err error) {
+
 	claims := CustomClaims{
 		isAdmin,
 		userId,

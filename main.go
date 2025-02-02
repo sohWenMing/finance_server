@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/sohWenMing/finance_server/config"
 	database "github.com/sohWenMing/finance_server/internal/database/connection"
@@ -23,7 +24,9 @@ func main() {
 	defer db.Close()
 	// init the server, send up channels
 
-	config := config.Config{}
+	config := config.InitConfig()
+	config.SetJWTValidDuration(10 * time.Minute)
+	//make jwt tokens in main function only valid for 10 minutes
 	config.RegisterQueries(db)
 	registerJWTSecretErr := config.RegisterJwtSecret(k)
 	//init the config, register all the queries and connect to the database

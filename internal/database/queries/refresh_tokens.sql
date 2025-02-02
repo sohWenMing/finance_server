@@ -1,11 +1,11 @@
 -- name: CreateRefreshToken :one
-INSERT INTO refresh_tokens (id, token, expires_on, created_on, updated_on)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO refresh_tokens (id, user_id, token, expires_on, created_on, updated_on)
+VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING *;
 
 
 -- name: GetRefreshTokenInfoByToken :one
-SELECT refresh_tokens.id, refresh_tokens.token, refresh_tokens.expires_on
+SELECT refresh_tokens.id, refresh_tokens.user_id, refresh_tokens.token, refresh_tokens.expires_on
   FROM refresh_tokens
   WHERE refresh_tokens.token = $1;
 
@@ -13,3 +13,8 @@ SELECT refresh_tokens.id, refresh_tokens.token, refresh_tokens.expires_on
 DELETE FROM refresh_tokens
 WHERE refresh_tokens.id = $1;
 
+-- name: UpdateRefreshToken :one
+UPDATE refresh_tokens
+SET expires_on = $1
+WHERE id = $2
+RETURNING refresh_tokens.id, refresh_tokens.user_id, refresh_tokens.token, refresh_tokens.expires_on;

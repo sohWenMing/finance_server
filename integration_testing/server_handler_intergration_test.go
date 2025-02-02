@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sohWenMing/finance_server/internal/auth"
+	"github.com/sohWenMing/finance_server/internal/database/sqlc_generated"
 	tokenmapping "github.com/sohWenMing/finance_server/mapping"
 	usermapping "github.com/sohWenMing/finance_server/mapping/user_mapping"
 	testhelpers "github.com/sohWenMing/finance_server/test_helpers"
@@ -205,6 +206,13 @@ func TestRefreshTokenGeneration(t *testing.T) {
 		return
 	}
 	defer TestConfig.Queries.DeleteUserById(testContext, userIdUUID)
+	runTestRefreshGeneration(t, createUserReqBody, responseJson, false)
+
+	runTestRefreshGeneration(t, createUserReqBody, responseJson, true)
+
+}
+
+func runTestRefreshGeneration(t *testing.T, createUserReqBody usermapping.UserJSON, responseJson usermapping.CreatedUserResponse, isResetRefresh bool) {
 	res, shouldReturn := runLoginAndGetResponse(t, createUserReqBody)
 	if shouldReturn {
 		return
@@ -219,6 +227,14 @@ func TestRefreshTokenGeneration(t *testing.T) {
 	}
 
 	refreshTokenCreatedAtLogin, err := TestConfig.Queries.GetRefreshTokenInfoByToken(testContext, loginResponse.RefreshToken)
+
+	updateParams := sqlc_generated.UpdateRefreshTokenParams{
+		ID:        refreshTokenCreatedAtLogin.ID,
+		ExpiresOn: time.Now().Add(-24 * time.Hour),
+	}
+	if isResetRefresh {
+		TestConfig.Queries.UpdateRefreshToken(testContext, updateParams)
+	}
 	defer TestConfig.Queries.DeleteRefreshTokenById(testContext, refreshTokenCreatedAtLogin.ID)
 	testhelpers.AssertNoError(t, err)
 	if err != nil {
@@ -247,25 +263,29 @@ func TestRefreshTokenGeneration(t *testing.T) {
 	// 	fmt.Println("error reading")
 	// }
 	// fmt.Printf("bodybytes:  %s", string(bodyBytes))
-
-	var refreshResponseJSON usermapping.LoginResponse
-	refreshDecoder := json.NewDecoder(refreshResponse.Body)
-	jsonDecodeErr = refreshDecoder.Decode(&refreshResponseJSON)
-	testhelpers.AssertNoError(t, jsonDecodeErr)
-	if jsonDecodeErr != nil {
-		fmt.Println("error occured at line 250")
+	switch isResetRefresh {
+	case false:
+		var refreshResponseJSON usermapping.LoginResponse
+		refreshDecoder := json.NewDecoder(refreshResponse.Body)
+		jsonDecodeErr = refreshDecoder.Decode(&refreshResponseJSON)
+		testhelpers.AssertNoError(t, jsonDecodeErr)
+		if jsonDecodeErr != nil {
+			fmt.Println("error occured at line 250")
+			return
+		}
+		retrievedRefreshToken, err := TestConfig.Queries.GetRefreshTokenInfoByToken(testContext, refreshResponseJSON.RefreshToken)
+		if err != nil {
+			return
+		}
+		defer TestConfig.Queries.DeleteRefreshTokenById(testContext, retrievedRefreshToken.ID)
+		testhelpers.AssertStringVals(t, responseJson.UserId, retrievedRefreshToken.UserID.String())
+		if retrievedRefreshToken.Token == loginResponse.RefreshToken {
+			t.Errorf("token should be different from the one that was created at login")
+		}
 		return
+	case true:
+		testhelpers.AssertIntVals(t, refreshResponse.StatusCode, http.StatusUnauthorized)
 	}
-	retrievedRefreshToken, err := TestConfig.Queries.GetRefreshTokenInfoByToken(testContext, refreshResponseJSON.RefreshToken)
-	if err != nil {
-		return
-	}
-	defer TestConfig.Queries.DeleteRefreshTokenById(testContext, retrievedRefreshToken.ID)
-	testhelpers.AssertStringVals(t, responseJson.UserId, retrievedRefreshToken.UserID.String())
-	if retrievedRefreshToken.Token == loginResponse.RefreshToken {
-		t.Errorf("token should be different from the one that was created at login")
-	}
-
 }
 
 func runLoginTest(t *testing.T, createUserPath string, isExpectPass bool) {

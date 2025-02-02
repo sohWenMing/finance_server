@@ -12,7 +12,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sohWenMing/finance_server/internal/auth"
+	dbwritefunctions "github.com/sohWenMing/finance_server/internal/database/db_write_functions"
 	"github.com/sohWenMing/finance_server/internal/database/sqlc_generated"
+	tokenmapping "github.com/sohWenMing/finance_server/mapping"
 
 	errorutils "github.com/sohWenMing/finance_server/error_utils"
 	usermapping "github.com/sohWenMing/finance_server/mapping/user_mapping"
@@ -115,32 +117,76 @@ func LoginUserHandler(getDuration func() time.Duration, queries *sqlc_generated.
 			return
 		}
 
-		tokenString, err := auth.GenerateJWTToken(user.ID.String(), user.IsAdmin, getDuration(), secret)
-		if err != nil {
-			writeInternalError(w)
+		generateJWTAndRefreshAndSendResponse(user, getDuration, secret, w, queries)
+	}
+
+}
+
+func CheckRefreshTokenAndGetNewJWTHandler(getDuration func() time.Duration,
+	queries *sqlc_generated.Queries, secret []byte) http.HandlerFunc {
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		var refreshTokenBody tokenmapping.RefreshTokenJSON
+		decoder := json.NewDecoder(r.Body)
+		jsonDecodeErr := decoder.Decode(&refreshTokenBody)
+		if jsonDecodeErr != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Header().Set("content-type", "text/plain")
+			w.Write([]byte("request body could not be parsed"))
 			return
 		}
 
-		refreshToken, _, err := auth.GenerateRefreshToken()
+		refreshToken, err := queries.GetRefreshTokenInfoByToken(context.Background(), refreshTokenBody.RefreshToken)
 		if err != nil {
-			writeInternalError(w)
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Header().Set("content-type", "text/plain")
+			w.Write([]byte("refresh token is invalid"))
+			return
+			//if err is returned can take it that the token could not be found, so just write unauthorized and return
 		}
-
-		responseJson := usermapping.LoginResponse{
-			IsSuccess:    true,
-			AccessToken:  tokenString,
-			RefreshToken: refreshToken,
+		if time.Now().After(refreshToken.ExpiresOn) {
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Header().Set("content-type", "text/plain")
+			w.Write([]byte("refresh token has expired"))
+			return
+			//refresh token expired, return
 		}
-		resBytes, marshalErr := json.Marshal(responseJson)
-		if marshalErr != nil {
-			writeInternalError(w)
+		user, err := queries.GetUserById(context.Background(), refreshToken.UserID)
+		if err != nil {
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Header().Set("content-type", "text/plain")
+			w.Write([]byte("refresh token is invalid"))
+			return
 		}
-		w.WriteHeader(200)
-		w.Header().Set("content-type", "application/json")
-		w.Write([]byte(resBytes))
+		generateJWTAndRefreshAndSendResponse(user, getDuration, secret, w, queries)
 
 	}
+}
+func generateJWTAndRefreshAndSendResponse(user sqlc_generated.User, getDuration func() time.Duration, secret []byte, w http.ResponseWriter, queries *sqlc_generated.Queries) {
+	tokenString, err := auth.GenerateJWTToken(user.ID.String(), user.IsAdmin, getDuration(), secret)
+	if err != nil {
+		writeInternalError(w)
+		return
+	}
 
+	refreshToken, err := dbwritefunctions.CreateRefreshToken(queries, getDuration(), user.ID)
+	if err != nil {
+		writeInternalError(w)
+		return
+	}
+
+	responseJson := usermapping.LoginResponse{
+		IsSuccess:    true,
+		AccessToken:  tokenString,
+		RefreshToken: refreshToken.Token,
+	}
+	resBytes, marshalErr := json.Marshal(responseJson)
+	if marshalErr != nil {
+		writeInternalError(w)
+	}
+	w.WriteHeader(200)
+	w.Header().Set("content-type", "application/json")
+	w.Write([]byte(resBytes))
 }
 
 func PingHandler(w http.ResponseWriter, r *http.Request) {

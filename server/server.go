@@ -25,6 +25,7 @@ func InitServer(isTest bool, portChan chan<- int, doneChan <-chan struct{}, exit
 	mux.Handle("GET /app/", http.StripPrefix("/app", handlers.FileServerMiddleWare(http.FileServer(root))))
 	mux.HandleFunc("POST /createUser", handlers.CreateUserHandler(config.Queries))
 	mux.HandleFunc("POST /loginUser", handlers.LoginUserHandler(config.GetJWTValidDuration, config.Queries, config.JwtSecret))
+	mux.HandleFunc("POST /refreshToken", handlers.CheckRefreshTokenAndGetNewJWTHandler(config.GetJWTValidDuration, config.Queries, config.JwtSecret))
 	server := &http.Server{
 		Handler: mux,
 	}

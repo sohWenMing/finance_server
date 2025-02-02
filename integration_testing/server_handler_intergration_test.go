@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sohWenMing/finance_server/internal/auth"
+	tokenmapping "github.com/sohWenMing/finance_server/mapping"
 	usermapping "github.com/sohWenMing/finance_server/mapping/user_mapping"
 	testhelpers "github.com/sohWenMing/finance_server/test_helpers"
 )
@@ -50,8 +51,6 @@ func TestFileServer(t *testing.T) {
 
 func TestCreateUserHandler(t *testing.T) {
 	TestConfig.SetJWTValidDuration(10 * time.Minute)
-	fmt.Printf("basePath: %s\n", basePath)
-	fmt.Printf("createUserPath: %s\n", createUserPath)
 	createUserReqBody, responseJson, shouldReturn := createAndRetrieveUser(t, createUserPath)
 	if shouldReturn {
 		return
@@ -146,16 +145,15 @@ func TestJWTValidation(t *testing.T) {
 		},
 	}
 	createUserReqBody, responseJson, shouldReturn := createAndRetrieveUser(t, createUserPath)
-
+	if shouldReturn {
+		return
+	}
 	userIdUUID, err := uuid.Parse(responseJson.UserId)
 	testhelpers.AssertNoError(t, err)
 	if err != nil {
 		return
 	}
 	defer TestConfig.Queries.DeleteUserById(context.Background(), userIdUUID)
-	if shouldReturn {
-		return
-	}
 	for _, test := range tests {
 		TestConfig.SetJWTValidDuration(test.jwtValidity)
 
@@ -184,9 +182,6 @@ func TestJWTValidation(t *testing.T) {
 				return
 			}
 			testhelpers.AssertNoError(t, err)
-			if err != nil {
-				return
-			}
 			switch test.isExpectErr {
 			case false:
 				testhelpers.AssertIntVals(t, testJWTAccessRes.StatusCode, 200)
@@ -195,6 +190,82 @@ func TestJWTValidation(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRefreshTokenGeneration(t *testing.T) {
+
+	createUserReqBody, responseJson, shouldReturn := createAndRetrieveUser(t, createUserPath)
+	if shouldReturn {
+		return
+	}
+
+	userIdUUID, err := uuid.Parse(responseJson.UserId)
+	testhelpers.AssertNoError(t, err)
+	if err != nil {
+		return
+	}
+	defer TestConfig.Queries.DeleteUserById(testContext, userIdUUID)
+	res, shouldReturn := runLoginAndGetResponse(t, createUserReqBody)
+	if shouldReturn {
+		return
+	}
+	var loginResponse usermapping.LoginResponse
+	decoder := json.NewDecoder(res.Body)
+	jsonDecodeErr := decoder.Decode(&loginResponse)
+	testhelpers.AssertNoError(t, jsonDecodeErr)
+	if jsonDecodeErr != nil {
+		fmt.Println("error occured at line 216")
+		return
+	}
+
+	refreshTokenCreatedAtLogin, err := TestConfig.Queries.GetRefreshTokenInfoByToken(testContext, loginResponse.RefreshToken)
+	defer TestConfig.Queries.DeleteRefreshTokenById(testContext, refreshTokenCreatedAtLogin.ID)
+	testhelpers.AssertNoError(t, err)
+	if err != nil {
+		return
+	}
+	refreshRequest := tokenmapping.RefreshTokenJSON{
+		RefreshToken: loginResponse.RefreshToken,
+	}
+	reqBody, err := json.Marshal(refreshRequest)
+	testhelpers.AssertNoError(t, err)
+	if err != nil {
+		return
+	}
+	req, err := http.NewRequest(http.MethodPost, testRefreshTokenPath, bytes.NewReader(reqBody))
+	testhelpers.AssertNoError(t, err)
+	if err != nil {
+		return
+	}
+	refreshResponse, refreshErr := client.Do(req)
+	testhelpers.AssertNoError(t, refreshErr)
+	if refreshErr != nil {
+		return
+	}
+	// bodyBytes, err := io.ReadAll(bufio.NewReader(refreshResponse.Body))
+	// if err != nil {
+	// 	fmt.Println("error reading")
+	// }
+	// fmt.Printf("bodybytes:  %s", string(bodyBytes))
+
+	var refreshResponseJSON usermapping.LoginResponse
+	refreshDecoder := json.NewDecoder(refreshResponse.Body)
+	jsonDecodeErr = refreshDecoder.Decode(&refreshResponseJSON)
+	testhelpers.AssertNoError(t, jsonDecodeErr)
+	if jsonDecodeErr != nil {
+		fmt.Println("error occured at line 250")
+		return
+	}
+	retrievedRefreshToken, err := TestConfig.Queries.GetRefreshTokenInfoByToken(testContext, refreshResponseJSON.RefreshToken)
+	if err != nil {
+		return
+	}
+	defer TestConfig.Queries.DeleteRefreshTokenById(testContext, retrievedRefreshToken.ID)
+	testhelpers.AssertStringVals(t, responseJson.UserId, retrievedRefreshToken.UserID.String())
+	if retrievedRefreshToken.Token == loginResponse.RefreshToken {
+		t.Errorf("token should be different from the one that was created at login")
+	}
+
 }
 
 func runLoginTest(t *testing.T, createUserPath string, isExpectPass bool) {

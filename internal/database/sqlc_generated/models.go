@@ -29,6 +29,7 @@ type RefreshToken struct {
 	ExpiresOn time.Time
 	CreatedOn time.Time
 	UpdatedOn time.Time
+	UserID    uuid.UUID
 }
 
 type User struct {

@@ -16,14 +16,15 @@ import (
 )
 
 var (
-	portChan          chan int
-	doneChan          chan struct{}
-	exitChan          chan struct{}
-	receivedPort      int
-	basePath          string
-	createUserPath    string
-	loginUserPath     string
-	testJWtAccessPath string
+	portChan             chan int
+	doneChan             chan struct{}
+	exitChan             chan struct{}
+	receivedPort         int
+	basePath             string
+	createUserPath       string
+	loginUserPath        string
+	testJWtAccessPath    string
+	testRefreshTokenPath string
 )
 
 var TestConfig = config.InitConfig()
@@ -64,6 +65,7 @@ func TestMain(m *testing.M) {
 	createUserPath = fmt.Sprintf("%s/createUser", basePath)
 	loginUserPath = fmt.Sprintf("%s/loginUser", basePath)
 	testJWtAccessPath = fmt.Sprintf("%s/testJWTAccess", basePath)
+	testRefreshTokenPath = fmt.Sprintf("%s/refreshToken", basePath)
 	code := m.Run()
 	os.Exit(code)
 

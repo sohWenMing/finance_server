@@ -13,13 +13,14 @@ import (
 )
 
 const createRefreshToken = `-- name: CreateRefreshToken :one
-INSERT INTO refresh_tokens (id, token, expires_on, created_on, updated_on)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id, token, expires_on, created_on, updated_on
+INSERT INTO refresh_tokens (id, user_id, token, expires_on, created_on, updated_on)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, token, expires_on, created_on, updated_on, user_id
 `
 
 type CreateRefreshTokenParams struct {
 	ID        uuid.UUID
+	UserID    uuid.UUID
 	Token     string
 	ExpiresOn time.Time
 	CreatedOn time.Time
@@ -29,6 +30,7 @@ type CreateRefreshTokenParams struct {
 func (q *Queries) CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) (RefreshToken, error) {
 	row := q.db.QueryRowContext(ctx, createRefreshToken,
 		arg.ID,
+		arg.UserID,
 		arg.Token,
 		arg.ExpiresOn,
 		arg.CreatedOn,
@@ -41,6 +43,7 @@ func (q *Queries) CreateRefreshToken(ctx context.Context, arg CreateRefreshToken
 		&i.ExpiresOn,
 		&i.CreatedOn,
 		&i.UpdatedOn,
+		&i.UserID,
 	)
 	return i, err
 }
@@ -56,13 +59,14 @@ func (q *Queries) DeleteRefreshTokenById(ctx context.Context, id uuid.UUID) erro
 }
 
 const getRefreshTokenInfoByToken = `-- name: GetRefreshTokenInfoByToken :one
-SELECT refresh_tokens.id, refresh_tokens.token, refresh_tokens.expires_on
+SELECT refresh_tokens.id, refresh_tokens.user_id, refresh_tokens.token, refresh_tokens.expires_on
   FROM refresh_tokens
   WHERE refresh_tokens.token = $1
 `
 
 type GetRefreshTokenInfoByTokenRow struct {
 	ID        uuid.UUID
+	UserID    uuid.UUID
 	Token     string
 	ExpiresOn time.Time
 }
@@ -70,6 +74,11 @@ type GetRefreshTokenInfoByTokenRow struct {
 func (q *Queries) GetRefreshTokenInfoByToken(ctx context.Context, token string) (GetRefreshTokenInfoByTokenRow, error) {
 	row := q.db.QueryRowContext(ctx, getRefreshTokenInfoByToken, token)
 	var i GetRefreshTokenInfoByTokenRow
-	err := row.Scan(&i.ID, &i.Token, &i.ExpiresOn)
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Token,
+		&i.ExpiresOn,
+	)
 	return i, err
 }

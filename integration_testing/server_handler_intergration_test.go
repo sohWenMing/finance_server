@@ -172,7 +172,7 @@ func TestJWTValidation(t *testing.T) {
 				return
 			}
 			req, err := http.NewRequest(http.MethodGet, testJWtAccessPath, nil)
-			req.Header.Set("Authorization", fmt.Sprintf("Bearer: %s", loginResponse.AccessToken))
+			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", loginResponse.AccessToken))
 			testhelpers.AssertNoError(t, err)
 			if err != nil {
 				return

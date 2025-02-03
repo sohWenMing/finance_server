@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -64,6 +65,7 @@ func ValidateAndReturnClaims(secret []byte, tokenString string) (returnedClaims 
 		return secret, nil
 	})
 	if err != nil {
+		fmt.Printf("Error in validate and return claims: %v\n", err)
 		return returnedClaims, err
 	}
 	claims, ok := token.Claims.(*CustomClaims)

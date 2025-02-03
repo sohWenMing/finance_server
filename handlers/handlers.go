@@ -240,7 +240,7 @@ func checkJWTTokenValidAndReturnClaims(r *http.Request, secret []byte) (claims a
 }
 func getJWTBearerToken(r *http.Request) (tokenString string, err error) {
 	authHeader := r.Header.Get("Authorization")
-	bearerString := strings.TrimPrefix(authHeader, "Bearer: ")
+	bearerString := strings.TrimPrefix(authHeader, "Bearer ")
 	if bearerString == "" {
 		return tokenString, errors.New("token not found in Authorization header in request")
 	}

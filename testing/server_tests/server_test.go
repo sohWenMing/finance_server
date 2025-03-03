@@ -3,16 +3,25 @@ package servertests
 import (
 	"net/http"
 	"os"
+	"os/exec"
 	"testing"
-
-	"github.com/sohWenMing/finance_project/internal/server"
 )
 
 func TestMain(m *testing.M) {
+	startServerCmd := cmdBuilder("../..", "make", "docker-server-start")
+	if err := startServerCmd.Run(); err != nil {
+		os.Stderr.WriteString("Error starting server: " + err.Error() + "\n")
+		os.Exit(1)
+	}
 
-	server, _ := server.InitServer()
-	defer server.Close()
 	code := m.Run()
+	stopServerCmd := cmdBuilder("../..", "make", "docker-server-stop")
+	stopServerCmd.Dir = "../.."
+	if err := stopServerCmd.Run(); err != nil {
+		os.Stderr.WriteString("Error stopping server: " + err.Error() + "\n")
+		os.Exit(1)
+	}
+
 	os.Exit(code)
 }
 
@@ -35,4 +44,12 @@ func TestInitServer(t *testing.T) {
 	if res.StatusCode != http.StatusOK {
 		t.Errorf("got %d, want %d", res.StatusCode, http.StatusOK)
 	}
+}
+
+func cmdBuilder(dir string, command string, args ...string) *exec.Cmd {
+	cmd := exec.Command(command, args...)
+	if dir != "" {
+		cmd.Dir = dir
+	}
+	return cmd
 }
